@@ -1,0 +1,12 @@
+# Hugo
+public/
+resources/_gen/
+.hugo_build.lock
+themes/
+
+# Node
+node_modules/
+package-lock.json
+
+# Go modules (managed by Hugo)
+go.sum

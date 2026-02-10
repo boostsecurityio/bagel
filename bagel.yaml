@@ -1,0 +1,16 @@
+version: 1
+probes:
+  git:
+    enabled: true
+  ssh:
+    enabled: true
+  npm:
+    enabled: true
+  gh:
+    enabled: true
+privacy:
+  redact_paths: []
+  exclude_env_prefixes: []
+output:
+  include_file_hashes: false
+  include_file_content: false

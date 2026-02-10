@@ -1,0 +1,22 @@
+baseURL = 'https://boostsecurityio.github.io/bagel/'
+languageCode = 'en-us'
+title = 'bagel'
+theme = "hugo-geekdoc"
+
+pluralizeListTitles = false
+pygmentsUseClasses = false
+pygmentsCodeFences = true
+disablePathToLower = true
+enableRobotsTXT = true
+
+[markup]
+  [markup.goldmark.renderer]
+    unsafe = true
+  [markup.tableOfContents]
+    startLevel = 1
+    endLevel = 9
+  [markup.highlight]
+    style = 'solarized-dark'
+
+[taxonomies]
+   tag = "tags"
