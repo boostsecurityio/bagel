@@ -15,7 +15,6 @@ var versionCmd = &cobra.Command{
 	Short: "prints the version of bagel",
 	Run: func(cmd *cobra.Command, args []string) {
 		fmt.Printf("Version: %s\nCommit: %s\nBuilt At: %s\n", Version, Commit, Date)
-		return
 	},
 }
 
