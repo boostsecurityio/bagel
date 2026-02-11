@@ -6,7 +6,8 @@ before:
     - go mod verify
 
 builds:
-  - env:
+  - main: ./cmd/bagel
+    env:
       - CGO_ENABLED=0
     goos:
       - linux
@@ -22,6 +23,11 @@ builds:
       - -s -w -X main.version={{.Version}} -X main.commit={{.Commit}} -X main.date={{.Date}} -X main.builtBy=goreleaser
     goarm:
       - '7'
+    ignore:
+      - goos: windows
+        goarch: arm
+      - goos: windows
+        goarch: arm64
 
 signs:
   - cmd: cosign
@@ -35,7 +41,7 @@ signs:
     output: true
 
 archives:
-  - format: tar.gz
+  - formats: [ 'zip' ]
     # this name template makes the OS and Arch compatible with the results of `uname`.
     name_template: >-
       {{ .ProjectName }}_
@@ -47,7 +53,7 @@ archives:
     # use zip for windows archives
     format_overrides:
       - goos: windows
-        format: zip
+        formats: ['zip']
 
 changelog:
   use: github-native
