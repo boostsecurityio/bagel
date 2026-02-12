@@ -94,7 +94,7 @@ go build -o bagel ./cmd/bagel
 ### Verify Installation
 
 ```bash
-bagel --version
+bagel version
 ```
 
 ---
