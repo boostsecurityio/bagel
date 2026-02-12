@@ -18,6 +18,11 @@ var (
 	cfgFile string
 	verbose bool
 )
+var (
+	Version string
+	Commit  string
+	Date    string
+)
 
 // rootCmd represents the base command
 var rootCmd = &cobra.Command{
