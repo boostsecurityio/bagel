@@ -27,12 +27,14 @@ var (
 // rootCmd represents the base command
 var rootCmd = &cobra.Command{
 	Use:   "bagel",
-	Short: "A Developer Endpoint Posture Scanner",
-	Long: `Bagel is a cross-platform CLI that inspects developer workstations
-and produces a structured report of installed dev tools, secret locations
-(metadata only), and system/shell posture.
+	Short: "Scan developer workstations for security misconfigurations and exposed secrets",
+	Long: `Bagel scans your development environment for security risks:
 
-The report can feed into SIEMs, policy engines, or MDM/EPP platforms.`,
+  - Exposed secrets in git config, shell history, env vars, and dotfiles
+  - Insecure settings in SSH, git, npm, cloud CLIs, and IDE configs
+  - Credential files for AWS, GCP, Azure, GitHub, and AI services
+
+Bagel never reads secret values — it only reports metadata and locations.`,
 	SilenceUsage:  true,
 	SilenceErrors: true,
 	PersistentPreRun: func(cmd *cobra.Command, args []string) {

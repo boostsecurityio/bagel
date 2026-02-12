@@ -60,6 +60,11 @@ sudo mv bagel /usr/local/bin/
 curl -sL https://github.com/boostsecurityio/bagel/releases/latest/download/bagel_Darwin_arm64.tar.gz | tar xz
 sudo mv bagel /usr/local/bin/
 ```
+**Homebrew:**
+```bash
+brew tap boostsecurityio/tap
+brew install bagel
+```
 
 **Linux:**
 ```bash
