@@ -280,6 +280,47 @@ All probes work cross-platform with appropriate path handling for each OS.
 
 ---
 
+## Scrub Command
+
+> **Fork addition** -- not in upstream Bagel.
+
+`bagel scrub` removes credentials from AI CLI session logs, replacing them with `[REDACTED-<type>]` markers while preserving conversation context.
+
+```bash
+# Preview what would be scrubbed (dry-run by default)
+bagel scrub
+
+# Apply changes
+bagel scrub --confirm
+
+# Scrub without grace period (includes recent files)
+bagel scrub --confirm --grace-minutes 0
+
+# Scrub a single file
+bagel scrub --confirm --file ~/.claude/projects/foo/abc123.jsonl
+```
+
+| Flag | Default | Description |
+|------|---------|-------------|
+| `--confirm` | `false` | Apply changes (default is dry-run) |
+| `--grace-minutes` | `60` | Skip files modified within this many minutes |
+| `--file` | | Scrub a single file instead of all eligible files |
+
+**Targets:**
+- `~/.claude/projects/**/*.jsonl` -- Claude Code session logs
+- `~/.claude/projects/**/*.txt` -- Claude Code tool results
+- `~/.codex/sessions/**/*.jsonl` -- Codex CLI session logs
+- `~/.gemini/tmp/*/chats/*.json` -- Gemini CLI chat logs
+- `~/.local/share/opencode/**/*.json` -- OpenCode session logs
+
+**Recommended workflow:**
+1. `bagel scan -f table` -- assess your exposure
+2. `bagel scrub --confirm` -- clean up
+3. `bagel scan -f table` -- verify reduction
+4. Rotate any credentials that were found
+
+---
+
 ## Integrations
 
 * **CI**: run `bagel scan --strict` in your pipeline to fail builds when findings are detected.
