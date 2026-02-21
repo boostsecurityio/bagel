@@ -31,5 +31,8 @@ go.work.sum
 .idea/
 # .vscode/
 
+# Claude Code local state
+.claude/
+
 /bagel
 dist/

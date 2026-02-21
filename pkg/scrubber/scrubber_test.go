@@ -376,7 +376,37 @@ func TestFindEligibleFiles_GraceZero(t *testing.T) {
 	assert.Contains(t, files, f, "grace=0 should include all files")
 }
 
-func TestRun_DryRun(t *testing.T) {
+func TestFindEligibleFiles_ShellHistory(t *testing.T) {
+	// Cannot use t.Parallel() with t.Setenv
+	tmpHome := t.TempDir()
+	t.Setenv("HOME", tmpHome)
+
+	// Create shell history files directly in $HOME
+	bashHist := filepath.Join(tmpHome, ".bash_history")
+	zshHist := filepath.Join(tmpHome, ".zsh_history")
+	require.NoError(t, os.WriteFile(bashHist, []byte("ls\ncd /tmp"), 0600))
+	require.NoError(t, os.WriteFile(zshHist, []byte("git status"), 0600))
+	oldTime := time.Now().Add(-2 * time.Hour)
+	require.NoError(t, os.Chtimes(bashHist, oldTime, oldTime))
+	require.NoError(t, os.Chtimes(zshHist, oldTime, oldTime))
+
+	// Create fish history in subdirectory
+	fishDir := filepath.Join(tmpHome, ".local", "share", "fish")
+	require.NoError(t, os.MkdirAll(fishDir, 0700))
+	fishHist := filepath.Join(fishDir, "fish_history")
+	require.NoError(t, os.WriteFile(fishHist, []byte("- cmd: ls"), 0600))
+	require.NoError(t, os.Chtimes(fishHist, oldTime, oldTime))
+
+	ctx := zerolog.Nop().WithContext(context.Background())
+	files, err := FindEligibleFiles(ctx, 60)
+	require.NoError(t, err)
+
+	assert.Contains(t, files, bashHist, "bash history should be found")
+	assert.Contains(t, files, zshHist, "zsh history should be found")
+	assert.Contains(t, files, fishHist, "fish history should be found")
+}
+
+func TestScan_FindsSecrets(t *testing.T) {
 	t.Parallel()
 
 	dir := t.TempDir()
@@ -385,23 +415,36 @@ func TestRun_DryRun(t *testing.T) {
 	require.NoError(t, os.WriteFile(path, []byte(content), 0600))
 
 	ctx := zerolog.Nop().WithContext(context.Background())
-	result, err := Run(ctx, RunInput{
-		Confirm: false,
-		File:    path,
-	})
+	result, err := Scan(ctx, ScanInput{File: path})
 	require.NoError(t, err)
 
 	assert.Equal(t, 1, result.FilesScanned)
-	assert.Equal(t, 1, result.FilesModified)
+	assert.Equal(t, []string{path}, result.Files)
 	assert.Equal(t, 1, result.Redactions)
 
-	// Verify file was NOT modified (dry run)
+	// Verify file was NOT modified (scan never writes)
 	data, err := os.ReadFile(path)
 	require.NoError(t, err)
-	assert.Equal(t, content, string(data), "dry run should not modify files")
+	assert.Equal(t, content, string(data))
 }
 
-func TestRun_Confirm(t *testing.T) {
+func TestScan_NoSecrets(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	path := filepath.Join(dir, "clean.jsonl")
+	require.NoError(t, os.WriteFile(path, []byte(`{"safe":"data"}`), 0600))
+
+	ctx := zerolog.Nop().WithContext(context.Background())
+	result, err := Scan(ctx, ScanInput{File: path})
+	require.NoError(t, err)
+
+	assert.Equal(t, 1, result.FilesScanned)
+	assert.Empty(t, result.Files)
+	assert.Equal(t, 0, result.Redactions)
+}
+
+func TestApply_ScrubsFiles(t *testing.T) {
 	t.Parallel()
 
 	dir := t.TempDir()
@@ -410,10 +453,7 @@ func TestRun_Confirm(t *testing.T) {
 	require.NoError(t, os.WriteFile(path, []byte(content), 0600))
 
 	ctx := zerolog.Nop().WithContext(context.Background())
-	result, err := Run(ctx, RunInput{
-		Confirm: true,
-		File:    path,
-	})
+	result, err := Apply(ctx, []string{path})
 	require.NoError(t, err)
 
 	assert.Equal(t, 1, result.FilesModified)
@@ -425,11 +465,20 @@ func TestRun_Confirm(t *testing.T) {
 	assert.Contains(t, string(data), "[REDACTED-aws-access-key]")
 }
 
-func TestRun_FileNotFound(t *testing.T) {
+func TestApply_EmptyFileList(t *testing.T) {
 	t.Parallel()
 
 	ctx := zerolog.Nop().WithContext(context.Background())
-	_, err := Run(ctx, RunInput{
+	result, err := Apply(ctx, nil)
+	require.NoError(t, err)
+	assert.Equal(t, 0, result.FilesModified)
+}
+
+func TestScan_FileNotFound(t *testing.T) {
+	t.Parallel()
+
+	ctx := zerolog.Nop().WithContext(context.Background())
+	_, err := Scan(ctx, ScanInput{
 		File: "/nonexistent/path.jsonl",
 	})
 	assert.Error(t, err)
