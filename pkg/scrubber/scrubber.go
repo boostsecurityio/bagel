@@ -55,7 +55,9 @@ var sessionDirs = []sessionDir{
 // FindEligibleFiles walks known AI CLI paths and returns files older
 // than graceMins minutes. Files modified within the grace period are
 // skipped to avoid interfering with active sessions.
-func FindEligibleFiles(graceMins int) ([]string, error) {
+func FindEligibleFiles(ctx context.Context, graceMins int) ([]string, error) {
+	log := zerolog.Ctx(ctx)
+
 	home, err := os.UserHomeDir()
 	if err != nil {
 		return nil, fmt.Errorf("get home dir: %w", err)
@@ -73,7 +75,8 @@ func FindEligibleFiles(graceMins int) ([]string, error) {
 		for _, glob := range sd.Patterns {
 			err := filepath.Walk(base, func(path string, info os.FileInfo, err error) error {
 				if err != nil {
-					return nil // skip unreadable entries
+					log.Warn().Err(err).Str("path", path).Msg("Skipping unreadable entry")
+					return nil
 				}
 				if info.IsDir() {
 					return nil
@@ -134,7 +137,6 @@ type RunInput struct {
 	Confirm      bool
 	GraceMinutes int
 	File         string
-	Logger       *zerolog.Logger
 }
 
 // RunResult holds the outcome of a scrub run.
@@ -154,8 +156,8 @@ type fileResult struct {
 // Run orchestrates a full scrub operation. When Confirm is false,
 // files are scanned but not modified (dry run). Files are processed
 // concurrently for performance.
-func Run(input RunInput) (RunResult, error) {
-	log := input.Logger
+func Run(ctx context.Context, input RunInput) (RunResult, error) {
+	log := zerolog.Ctx(ctx)
 	result := RunResult{CountsByType: make(map[string]int)}
 
 	var files []string
@@ -166,7 +168,7 @@ func Run(input RunInput) (RunResult, error) {
 		files = []string{input.File}
 	} else {
 		var err error
-		files, err = FindEligibleFiles(input.GraceMinutes)
+		files, err = FindEligibleFiles(ctx, input.GraceMinutes)
 		if err != nil {
 			return result, fmt.Errorf("find files: %w", err)
 		}
@@ -187,7 +189,7 @@ func Run(input RunInput) (RunResult, error) {
 
 	// Process files concurrently
 	workers := runtime.GOMAXPROCS(0)
-	g, ctx := errgroup.WithContext(context.Background())
+	g, ctx := errgroup.WithContext(ctx)
 	g.SetLimit(workers)
 
 	var mu sync.Mutex

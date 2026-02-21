@@ -4,6 +4,7 @@
 package scrubber
 
 import (
+	"context"
 	"os"
 	"path/filepath"
 	"testing"
@@ -350,7 +351,8 @@ func TestFindEligibleFiles(t *testing.T) {
 	newFile := filepath.Join(claudeDir, "active.jsonl")
 	require.NoError(t, os.WriteFile(newFile, []byte("data"), 0600))
 
-	files, err := FindEligibleFiles(60)
+	ctx := zerolog.Nop().WithContext(context.Background())
+	files, err := FindEligibleFiles(ctx, 60)
 	require.NoError(t, err)
 
 	assert.Contains(t, files, oldFile, "old file should be eligible")
@@ -368,7 +370,8 @@ func TestFindEligibleFiles_GraceZero(t *testing.T) {
 	f := filepath.Join(claudeDir, "session.jsonl")
 	require.NoError(t, os.WriteFile(f, []byte("data"), 0600))
 
-	files, err := FindEligibleFiles(0)
+	ctx := zerolog.Nop().WithContext(context.Background())
+	files, err := FindEligibleFiles(ctx, 0)
 	require.NoError(t, err)
 	assert.Contains(t, files, f, "grace=0 should include all files")
 }
@@ -381,11 +384,10 @@ func TestRun_DryRun(t *testing.T) {
 	content := `{"key":"AKIAIOSFODNN7EXAMPLE"}`
 	require.NoError(t, os.WriteFile(path, []byte(content), 0600))
 
-	log := zerolog.Nop()
-	result, err := Run(RunInput{
+	ctx := zerolog.Nop().WithContext(context.Background())
+	result, err := Run(ctx, RunInput{
 		Confirm: false,
 		File:    path,
-		Logger:  &log,
 	})
 	require.NoError(t, err)
 
@@ -407,11 +409,10 @@ func TestRun_Confirm(t *testing.T) {
 	content := `{"key":"AKIAIOSFODNN7EXAMPLE"}`
 	require.NoError(t, os.WriteFile(path, []byte(content), 0600))
 
-	log := zerolog.Nop()
-	result, err := Run(RunInput{
+	ctx := zerolog.Nop().WithContext(context.Background())
+	result, err := Run(ctx, RunInput{
 		Confirm: true,
 		File:    path,
-		Logger:  &log,
 	})
 	require.NoError(t, err)
 
@@ -427,10 +428,9 @@ func TestRun_Confirm(t *testing.T) {
 func TestRun_FileNotFound(t *testing.T) {
 	t.Parallel()
 
-	log := zerolog.Nop()
-	_, err := Run(RunInput{
-		File:   "/nonexistent/path.jsonl",
-		Logger: &log,
+	ctx := zerolog.Nop().WithContext(context.Background())
+	_, err := Run(ctx, RunInput{
+		File: "/nonexistent/path.jsonl",
 	})
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "file not found")

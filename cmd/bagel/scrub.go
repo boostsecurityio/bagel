@@ -55,11 +55,10 @@ func runScrub(cmd *cobra.Command, _ []string) error {
 	ctx := cmd.Context()
 	log := zerolog.Ctx(ctx)
 
-	result, err := scrubber.Run(scrubber.RunInput{
+	result, err := scrubber.Run(ctx, scrubber.RunInput{
 		Confirm:      scrubConfirm,
 		GraceMinutes: scrubGraceMinutes,
 		File:         scrubFile,
-		Logger:       log,
 	})
 	if err != nil {
 		return fmt.Errorf("scrub failed: %w", err)
