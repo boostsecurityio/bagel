@@ -168,5 +168,10 @@ func initializeProbes(cfg *models.Config) []probe.Probe {
 		probes = append(probes, probe.NewAICliProbe(cfg.Probes.AICli, registry))
 	}
 
+	// Docker credentials probe
+	if cfg.Probes.DockerCreds.Enabled {
+		probes = append(probes, probe.NewDockerCredsProbe(cfg.Probes.DockerCreds))
+	}
+
 	return probes
 }

@@ -33,3 +33,6 @@ go.work.sum
 
 /bagel
 dist/
+
+# mise-en-place
+mise.toml

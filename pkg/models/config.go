@@ -30,6 +30,7 @@ type ProbeConfig struct {
 	JetBrains    ProbeSettings `yaml:"jetbrains" mapstructure:"jetbrains"`
 	GH           ProbeSettings `yaml:"gh" mapstructure:"gh"`
 	AICli        ProbeSettings `yaml:"ai_cli" mapstructure:"ai_cli"`
+	DockerCreds  ProbeSettings `yaml:"docker" mapstructure:"docker"`
 }
 
 // ProbeSettings contains settings for a specific probe

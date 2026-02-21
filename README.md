@@ -8,7 +8,7 @@
 
 Bagel is a cross‑platform CLI that inspects developer workstations (macOS, Linux, Windows) and produces a structured report of:
 
-* **Dev tool configurations and risky settings** across 9 probes: Git, SSH, npm, environment variables, shell history, cloud credentials (AWS/GCP/Azure), JetBrains IDEs, GitHub CLI, and AI CLI tools.
+* **Dev tool configurations and risky settings** across 10 probes: Git, SSH, npm, environment variables, shell history, cloud credentials (AWS/GCP/Azure), JetBrains IDEs, GitHub CLI, AI CLI tools and Docker.
 * **Secret locations (metadata only)**: presence of tokens, keys, and credentials in config files, env vars, and history—detected by 8 secret detectors—**never the secret values**.
 
 For detailed documentation on each probe and detector, see the [Bagel docs site](https://boostsecurityio.github.io/bagel/).
@@ -173,6 +173,8 @@ probes:
     enabled: true
   ai_cli:
     enabled: true
+  docker:
+    enabled: true
 privacy:
   redact_paths: []
   exclude_env_prefixes: []
@@ -241,17 +243,18 @@ Each probe declares its scope (user/system), paths touched, env vars read, and r
 
 ### Current Probes
 
-| Probe | Description | What it checks |
-|-------|-------------|----------------|
-| `git` | Git configuration security | SSL verification disabled, SSH config issues (StrictHostKeyChecking, UserKnownHostsFile), plaintext credential storage (`credential.helper=store`), dangerous protocols (ext, fd, file), fsck disabled, proxy settings, custom hooks path |
-| `ssh` | SSH configuration and key security | `StrictHostKeyChecking=no`, `UserKnownHostsFile=/dev/null`, `ForwardAgent=yes`, private key file permissions, unencrypted private keys |
-| `npm` | NPM/Yarn configuration | `.npmrc` and `.yarnrc` files: `strict-ssl=false`, HTTP (non-HTTPS) registries, `always-auth` settings |
-| `env` | Environment variables and dotfiles | Environment variables, shell config files (`.bashrc`, `.zshrc`), `.env` files for embedded secrets |
-| `shell_history` | Shell history files | `.bash_history`, `.zsh_history` for secrets in command history |
-| `cloud` | Cloud provider credentials | AWS (`~/.aws/config`, `~/.aws/credentials`), GCP (`~/.config/gcloud/`), Azure config files |
-| `jetbrains` | JetBrains IDE configuration | JetBrains IDE workspace files and configuration for embedded secrets |
-| `gh` | GitHub CLI | GitHub CLI authentication tokens and configuration |
-| `ai_cli` | AI CLI tools | Credential files and chat logs for Gemini, Codex, Claude, and OpenCode |
+| Probe           | Description                        | What it checks                                                                                                                                                                                                                            |
+|-----------------|------------------------------------|-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `git`           | Git configuration security         | SSL verification disabled, SSH config issues (StrictHostKeyChecking, UserKnownHostsFile), plaintext credential storage (`credential.helper=store`), dangerous protocols (ext, fd, file), fsck disabled, proxy settings, custom hooks path |
+| `ssh`           | SSH configuration and key security | `StrictHostKeyChecking=no`, `UserKnownHostsFile=/dev/null`, `ForwardAgent=yes`, private key file permissions, unencrypted private keys                                                                                                    |
+| `npm`           | NPM/Yarn configuration             | `.npmrc` and `.yarnrc` files: `strict-ssl=false`, HTTP (non-HTTPS) registries, `always-auth` settings                                                                                                                                     |
+| `env`           | Environment variables and dotfiles | Environment variables, shell config files (`.bashrc`, `.zshrc`), `.env` files for embedded secrets                                                                                                                                        |
+| `shell_history` | Shell history files                | `.bash_history`, `.zsh_history` for secrets in command history                                                                                                                                                                            |
+| `cloud`         | Cloud provider credentials         | AWS (`~/.aws/config`, `~/.aws/credentials`), GCP (`~/.config/gcloud/`), Azure config files                                                                                                                                                |
+| `jetbrains`     | JetBrains IDE configuration        | JetBrains IDE workspace files and configuration for embedded secrets                                                                                                                                                                      |
+| `gh`            | GitHub CLI                         | GitHub CLI authentication tokens and configuration                                                                                                                                                                                        |
+| `ai_cli`        | AI CLI tools                       | Credential files and chat logs for Gemini, Codex, Claude, and OpenCode                                                                                                                                                                    |
+| `docker`        | Docker                             | Docker config files with registry creds in cleartext                                                                                                                                                                                      |
 
 ### Current Detectors
 

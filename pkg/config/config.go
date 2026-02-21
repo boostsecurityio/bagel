@@ -66,6 +66,7 @@ func setDefaults(v *viper.Viper) {
 	v.SetDefault("probes.jetbrains.enabled", true)
 	v.SetDefault("probes.gh.enabled", true)
 	v.SetDefault("probes.ai_cli.enabled", true)
+	v.SetDefault("probes.docker.enabled", true)
 	v.SetDefault("output.include_file_hashes", false)
 	v.SetDefault("output.include_file_content", false)
 
