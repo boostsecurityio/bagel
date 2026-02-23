@@ -5,10 +5,9 @@ package probe
 
 import (
 	"context"
-	"encoding/json"
-	"fmt"
 	"os"
 
+	"github.com/boostsecurityio/bagel/pkg/detector"
 	"github.com/boostsecurityio/bagel/pkg/fileindex"
 	"github.com/boostsecurityio/bagel/pkg/models"
 	"github.com/rs/zerolog/log"
@@ -16,16 +15,18 @@ import (
 
 // DockerCredsProbe checks for Docker registry creds in cleartext
 type DockerCredsProbe struct {
-	enabled   bool
-	config    models.ProbeSettings
-	fileIndex *fileindex.FileIndex
+	enabled          bool
+	config           models.ProbeSettings
+	fileIndex        *fileindex.FileIndex
+	detectorRegistry *detector.Registry
 }
 
 // NewDockerCredsProbe creates a new cloud credentials probe
-func NewDockerCredsProbe(config models.ProbeSettings) *DockerCredsProbe {
+func NewDockerCredsProbe(config models.ProbeSettings, registry *detector.Registry) *DockerCredsProbe {
 	return &DockerCredsProbe{
-		enabled: config.Enabled,
-		config:  config,
+		enabled:          config.Enabled,
+		config:           config,
+		detectorRegistry: registry,
 	}
 }
 
@@ -66,43 +67,12 @@ func (dcp *DockerCredsProbe) Execute(ctx context.Context) ([]models.Finding, err
 		if err != nil {
 			return findings, err
 		}
-		registries, err := regsWithCreds(fileContents)
-		if err != nil {
-			return findings, err
-		}
-		for _, registry := range registries {
-			findings = append(findings, models.Finding{
-				ID:        fmt.Sprintf("%s:%s", location, registry),
-				Probe:     dcp.Name(),
-				Title:     "Docker credentials found",
-				Message:   fmt.Sprintf("%s contains cleartext credentials for %s. Consider using a credential helper.", location, registry),
-				Path:      location,
-				Severity:  "high",
-				Locations: locations,
-			})
-		}
+		detCtx := models.NewDetectionContext(models.NewDetectionContextInput{
+			Source:    "file:" + location,
+			ProbeName: dcp.Name(),
+		})
+		detectedSecrets := dcp.detectorRegistry.DetectAll(string(fileContents), detCtx)
+		findings = append(findings, detectedSecrets...)
 	}
 	return findings, nil
-}
-
-func regsWithCreds(fileContents []byte) ([]string, error) {
-	var registries []string
-	var config map[string]interface{}
-	if err := json.Unmarshal(fileContents, &config); err != nil {
-		return registries, err
-	}
-	auths, ok := config["auths"].(map[string]interface{})
-	if !ok {
-		return registries, nil
-	}
-	for registry, settings := range auths {
-		propsForRegistry, ok := settings.(map[string]interface{})
-		if !ok {
-			continue
-		}
-		if propsForRegistry["auth"] != nil {
-			registries = append(registries, registry)
-		}
-	}
-	return registries, nil
 }

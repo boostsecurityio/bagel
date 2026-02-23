@@ -1,12 +1,11 @@
 // Copyright (C) 2026 boostsecurity.io
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-package probe
+package detector
 
 import (
 	"testing"
 
-	"github.com/boostsecurityio/bagel/pkg/models"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -40,23 +39,14 @@ var configFileWithoutCreds = `{
 }
 `
 
-var probeSettings = models.ProbeSettings{
-	Enabled: true,
-}
-
-func TestName(t *testing.T) {
-	probe := NewDockerCredsProbe(probeSettings)
-	assert.Equal(t, probe.Name(), "Docker credentials")
-}
-
 func TestParsingFileWithCreds(t *testing.T) {
 	expected := []string{"dhi.io"}
-	actual, _ := regsWithCreds([]byte(configFileWithCreds))
+	actual, _ := regsWithCreds(configFileWithCreds)
 	assert.Equal(t, expected, actual)
 }
 
 func TestParsingFileWithoutCreds(t *testing.T) {
 	var expected []string
-	actual, _ := regsWithCreds([]byte(configFileWithoutCreds))
+	actual, _ := regsWithCreds(configFileWithoutCreds)
 	assert.Equal(t, expected, actual)
 }

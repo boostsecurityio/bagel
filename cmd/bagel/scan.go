@@ -119,6 +119,7 @@ func initializeProbes(cfg *models.Config) []probe.Probe {
 	registry.Register(detector.NewCloudCredentialsDetector())
 	registry.Register(detector.NewGenericAPIKeyDetector())
 	registry.Register(detector.NewJWTDetector())
+	registry.Register(detector.NewDockerCredentialsDetector())
 	// Add more detectors here as they are implemented:
 	// registry.Register(detector.NewSlackTokenDetector())
 	// etc.
@@ -170,7 +171,7 @@ func initializeProbes(cfg *models.Config) []probe.Probe {
 
 	// Docker credentials probe
 	if cfg.Probes.DockerCreds.Enabled {
-		probes = append(probes, probe.NewDockerCredsProbe(cfg.Probes.DockerCreds))
+		probes = append(probes, probe.NewDockerCredsProbe(cfg.Probes.DockerCreds, registry))
 	}
 
 	return probes
