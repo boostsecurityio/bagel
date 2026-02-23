@@ -8,15 +8,17 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
-	"path/filepath"
 
+	"github.com/boostsecurityio/bagel/pkg/fileindex"
 	"github.com/boostsecurityio/bagel/pkg/models"
+	"github.com/rs/zerolog/log"
 )
 
 // DockerCredsProbe checks for Docker registry creds in cleartext
 type DockerCredsProbe struct {
-	enabled bool
-	config  models.ProbeSettings
+	enabled   bool
+	config    models.ProbeSettings
+	fileIndex *fileindex.FileIndex
 }
 
 // NewDockerCredsProbe creates a new cloud credentials probe
@@ -37,13 +39,24 @@ func (dcp *DockerCredsProbe) IsEnabled() bool {
 	return dcp.enabled
 }
 
+// SetFileIndex sets the file index for this probe (implements FileIndexAware)
+func (dcp *DockerCredsProbe) SetFileIndex(index *fileindex.FileIndex) {
+	dcp.fileIndex = index
+}
+
 // Execute runs the Docker credentials probe
-func (dcp *DockerCredsProbe) Execute(_ context.Context) ([]models.Finding, error) {
+func (dcp *DockerCredsProbe) Execute(ctx context.Context) ([]models.Finding, error) {
 	var findings []models.Finding
-	locations, err := configLocations()
-	if err != nil {
-		return findings, err
+
+	// If file index is not available, skip probe
+	if dcp.fileIndex == nil {
+		log.Ctx(ctx).Warn().
+			Str("probe", dcp.Name()).
+			Msg("File index not available, skipping Docker credentials probe")
+		return findings, nil
 	}
+
+	locations := dcp.fileIndex.Get("docker_config")
 	for _, location := range locations {
 		_, err := os.Stat(location)
 		if err != nil {
@@ -70,22 +83,6 @@ func (dcp *DockerCredsProbe) Execute(_ context.Context) ([]models.Finding, error
 		}
 	}
 	return findings, nil
-}
-
-func configLocations() ([]string, error) {
-	home, err := os.UserHomeDir()
-	if err != nil {
-		return nil, err
-	}
-	locations := []string{
-		filepath.Join(home, ".docker", "config.json"),
-		filepath.Join(home, ".config", "containers", "auth.json"),
-	}
-	xdgDir, found := os.LookupEnv("XDG_RUNTIME_DIR")
-	if found {
-		locations = append(locations, filepath.Join(xdgDir, "containers", "auth.json"))
-	}
-	return locations, nil
 }
 
 func regsWithCreds(fileContents []byte) ([]string, error) {
