@@ -2,5 +2,5 @@ SUSTAPLE117 - Alexis-Maurer Fortin
 fproulx-boostsecurity - François Proulx
 Talgarr - Sebastien Graveline
 julien-boost - Julien Champoux
-GuillaumeRoss - 
+GuillaumeRoss - Guillaume Ross 
 jksolbakken - Jan-Kåre Solbakken
