@@ -12,7 +12,8 @@ import (
 
 // GitHubTokenDetector detects various GitHub token types
 type GitHubTokenDetector struct {
-	tokenPatterns map[string]*tokenPattern
+	tokenPatterns  map[string]*tokenPattern
+	redactPatterns []RedactPattern
 }
 
 type tokenPattern struct {
@@ -56,6 +57,38 @@ func NewGitHubPATDetector() *GitHubTokenDetector {
 				description: "GitHub Refresh Token",
 			},
 		},
+		redactPatterns: []RedactPattern{
+			{
+				Regex:       regexp.MustCompile(`ghp_[A-Za-z0-9_]{36,}`),
+				Replacement: `[REDACTED-github-pat]`,
+				Label:       "REDACTED-github-pat",
+				Prefixes:    []string{"ghp_"},
+			},
+			{
+				Regex:       regexp.MustCompile(`gho_[A-Za-z0-9_]{36,}`),
+				Replacement: `[REDACTED-github-oauth]`,
+				Label:       "REDACTED-github-oauth",
+				Prefixes:    []string{"gho_"},
+			},
+			{
+				Regex:       regexp.MustCompile(`ghu_[A-Za-z0-9_]{36,}`),
+				Replacement: `[REDACTED-github-user]`,
+				Label:       "REDACTED-github-user",
+				Prefixes:    []string{"ghu_"},
+			},
+			{
+				Regex:       regexp.MustCompile(`ghs_[A-Za-z0-9_]{36,}`),
+				Replacement: `[REDACTED-github-app]`,
+				Label:       "REDACTED-github-app",
+				Prefixes:    []string{"ghs_"},
+			},
+			{
+				Regex:       regexp.MustCompile(`github_pat_[A-Za-z0-9_]{22,}`),
+				Replacement: `[REDACTED-github-fine-pat]`,
+				Label:       "REDACTED-github-fine-pat",
+				Prefixes:    []string{"github_pat_"},
+			},
+		},
 	}
 }
 
@@ -77,6 +110,11 @@ func (d *GitHubTokenDetector) Detect(content string, ctx *models.DetectionContex
 	}
 
 	return findings
+}
+
+// Redact replaces GitHub tokens in content with redaction markers.
+func (d *GitHubTokenDetector) Redact(content string) (string, map[string]int) {
+	return ApplyRedactPatterns(content, d.redactPatterns)
 }
 
 // createFinding creates a finding for a detected GitHub token

@@ -12,30 +12,10 @@ import (
 	"strings"
 	"time"
 
+	"github.com/boostsecurityio/bagel/pkg/detector"
 	"github.com/rs/zerolog"
 	"golang.org/x/sync/errgroup"
 )
-
-// patterns is initialized once and reused across all scrub operations.
-var patterns = Patterns()
-
-// ScrubContent applies all credential patterns to content.
-// Returns the scrubbed text and a map of label -> match count.
-// Uses prefix checks to skip regexes that cannot match.
-func ScrubContent(content string) (string, map[string]int) {
-	counts := make(map[string]int)
-	for _, p := range patterns {
-		if !containsAny(content, p.Prefixes) {
-			continue
-		}
-		matches := p.Regex.FindAllString(content, -1)
-		if len(matches) > 0 {
-			counts[p.Label] += len(matches)
-			content = p.Regex.ReplaceAllString(content, p.Replacement)
-		}
-	}
-	return content, counts
-}
 
 // sessionDir defines an AI CLI session directory and its file globs.
 type sessionDir struct {
@@ -117,25 +97,19 @@ func FindEligibleFiles(ctx context.Context, graceMins int) ([]string, error) {
 	return files, nil
 }
 
-// ScrubFile reads a file, scrubs its content, and writes it back.
+// scrubFile reads a file, applies all registry redactions, and writes back.
 // Returns whether the file was modified and counts by label.
-func ScrubFile(path string) (bool, map[string]int, error) {
+func scrubFile(path string, registry *detector.Registry) (bool, map[string]int, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
 		return false, nil, fmt.Errorf("read %s: %w", path, err)
 	}
 
 	content := string(data)
-
-	// Fast path: skip files with no potential secrets
-	if !MightContainSecrets(content) {
-		return false, nil, nil
-	}
-
-	scrubbed, counts := ScrubContent(content)
+	scrubbed, counts := registry.RedactAll(content)
 
 	if scrubbed == content {
-		return false, counts, nil
+		return false, nil, nil
 	}
 
 	info, err := os.Stat(path)
@@ -154,6 +128,7 @@ func ScrubFile(path string) (bool, map[string]int, error) {
 type ScanInput struct {
 	GraceMinutes int
 	File         string
+	Registry     *detector.Registry
 }
 
 // ScanResult holds the outcome of scanning files for credentials.
@@ -163,6 +138,12 @@ type ScanResult struct {
 	Files        []string
 	Redactions   int
 	CountsByType map[string]int
+}
+
+// ApplyInput configures a scrub apply operation.
+type ApplyInput struct {
+	Files    []string
+	Registry *detector.Registry
 }
 
 // ApplyResult holds the outcome of applying redactions.
@@ -199,7 +180,19 @@ func Scan(ctx context.Context, input ScanInput) (ScanResult, error) {
 
 	log.Debug().Int("file_count", len(files)).Msg("Found eligible files")
 
-	results, err := processFilesConcurrently(ctx, files, scanFile)
+	processor := func(path string) (fileResult, error) {
+		data, err := os.ReadFile(path)
+		if err != nil {
+			return fileResult{}, fmt.Errorf("read %s: %w", path, err)
+		}
+		_, counts := input.Registry.RedactAll(string(data))
+		if len(counts) > 0 {
+			return fileResult{changed: true, counts: counts}, nil
+		}
+		return fileResult{}, nil
+	}
+
+	results, err := processFilesConcurrently(ctx, files, processor)
 	if err != nil {
 		return result, err
 	}
@@ -219,15 +212,23 @@ func Scan(ctx context.Context, input ScanInput) (ScanResult, error) {
 // Apply scrubs credential patterns from the given files, writing
 // changes back to disk. Call Scan first to discover which files
 // need scrubbing.
-func Apply(ctx context.Context, files []string) (ApplyResult, error) {
+func Apply(ctx context.Context, input ApplyInput) (ApplyResult, error) {
 	log := zerolog.Ctx(ctx)
 	result := ApplyResult{CountsByType: make(map[string]int)}
 
-	if len(files) == 0 {
+	if len(input.Files) == 0 {
 		return result, nil
 	}
 
-	results, err := processFilesConcurrently(ctx, files, applyFile)
+	processor := func(path string) (fileResult, error) {
+		changed, counts, err := scrubFile(path, input.Registry)
+		if err != nil {
+			return fileResult{}, err
+		}
+		return fileResult{changed: changed, counts: counts}, nil
+	}
+
+	results, err := processFilesConcurrently(ctx, input.Files, processor)
 	if err != nil {
 		return result, err
 	}
@@ -241,7 +242,7 @@ func Apply(ctx context.Context, files []string) (ApplyResult, error) {
 		result.Redactions += sumCounts(fr.counts)
 
 		log.Debug().
-			Str("file", filepath.Base(files[i])).
+			Str("file", filepath.Base(input.Files[i])).
 			Str("types", formatCounts(fr.counts)).
 			Msg("Scrubbed")
 	}
@@ -298,34 +299,6 @@ func processFilesConcurrently(
 		return nil, fmt.Errorf("process files: %w", err)
 	}
 	return results, nil
-}
-
-// scanFile reads a file and checks for redactable content without writing.
-func scanFile(path string) (fileResult, error) {
-	data, err := os.ReadFile(path)
-	if err != nil {
-		return fileResult{}, fmt.Errorf("read %s: %w", path, err)
-	}
-
-	content := string(data)
-	if !MightContainSecrets(content) {
-		return fileResult{}, nil
-	}
-
-	_, counts := ScrubContent(content)
-	if len(counts) > 0 {
-		return fileResult{changed: true, counts: counts}, nil
-	}
-	return fileResult{}, nil
-}
-
-// applyFile reads a file, scrubs it, and writes the result back.
-func applyFile(path string) (fileResult, error) {
-	changed, counts, err := ScrubFile(path)
-	if err != nil {
-		return fileResult{}, err
-	}
-	return fileResult{changed: changed, counts: counts}, nil
 }
 
 func mergeCounts(dst, src map[string]int) {

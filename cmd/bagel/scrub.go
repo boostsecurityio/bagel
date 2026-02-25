@@ -10,6 +10,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/boostsecurityio/bagel/pkg/detector"
 	"github.com/boostsecurityio/bagel/pkg/scrubber"
 	"github.com/mattn/go-isatty"
 	"github.com/rs/zerolog"
@@ -71,14 +72,33 @@ For findings requiring manual action (key rotation, re-encryption),
 run 'bagel scan' and follow the remediation guidance.
 `
 
+// newScrubRegistry builds a detector registry configured for redaction.
+// Registration order matters: specific patterns before general ones.
+func newScrubRegistry() *detector.Registry {
+	registry := detector.NewRegistry()
+	registry.Register(detector.NewSSHPrivateKeyDetector())
+	registry.Register(detector.NewHTTPAuthDetector())
+	registry.Register(detector.NewAIServiceDetector())
+	registry.Register(detector.NewCloudCredentialsDetector())
+	registry.Register(detector.NewSplunkTokenDetector())
+	registry.Register(detector.NewGitHubPATDetector())
+	registry.Register(detector.NewNPMTokenDetector())
+	registry.Register(detector.NewJWTDetector())
+	registry.Register(detector.NewGenericAPIKeyDetector())
+	return registry
+}
+
 func runScrub(cmd *cobra.Command, _ []string) error {
 	ctx := cmd.Context()
 	log := zerolog.Ctx(ctx)
+
+	registry := newScrubRegistry()
 
 	// Phase 1: Scan
 	scanResult, err := scrubber.Scan(ctx, scrubber.ScanInput{
 		GraceMinutes: scrubGraceMinutes,
 		File:         scrubFile,
+		Registry:     registry,
 	})
 	if err != nil {
 		return fmt.Errorf("scrub scan failed: %w", err)
@@ -110,7 +130,10 @@ func runScrub(cmd *cobra.Command, _ []string) error {
 	}
 
 	// Phase 3: Apply
-	applyResult, err := scrubber.Apply(ctx, scanResult.Files)
+	applyResult, err := scrubber.Apply(ctx, scrubber.ApplyInput{
+		Files:    scanResult.Files,
+		Registry: registry,
+	})
 	if err != nil {
 		return fmt.Errorf("scrub apply failed: %w", err)
 	}

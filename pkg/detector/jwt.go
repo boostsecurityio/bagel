@@ -12,12 +12,23 @@ import (
 
 // JWTDetector detects JWT tokens in various contexts
 type JWTDetector struct {
-	tokenPatterns map[string]*tokenPattern
+	tokenPatterns  map[string]*tokenPattern
+	redactPatterns []RedactPattern
 }
 
 // NewJWTDetector creates a new JWT detector
 func NewJWTDetector() *JWTDetector {
 	return &JWTDetector{
+		// Standalone JWT redaction (after Bearer patterns handled by HTTPAuthDetector)
+		redactPatterns: []RedactPattern{
+			{
+				Regex: regexp.MustCompile(
+					`eyJ[A-Za-z0-9_-]{10,}\.eyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}`),
+				Replacement: `[REDACTED-jwt]`,
+				Label:       "REDACTED-jwt",
+				Prefixes:    []string{"eyJ"},
+			},
+		},
 		tokenPatterns: map[string]*tokenPattern{
 			"jwt-token": {
 				// Matches: <base64_header>.<base64_payload>.<base64_sig>
@@ -61,6 +72,11 @@ func (d *JWTDetector) Detect(content string, ctx *models.DetectionContext) []mod
 	}
 
 	return findings
+}
+
+// Redact replaces standalone JWT tokens in content with redaction markers.
+func (d *JWTDetector) Redact(content string) (string, map[string]int) {
+	return ApplyRedactPatterns(content, d.redactPatterns)
 }
 
 // createFinding creates a finding for detected JWT tokens

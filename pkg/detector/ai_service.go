@@ -12,12 +12,34 @@ import (
 
 // AIServiceDetector detects API keys for various AI services
 type AIServiceDetector struct {
-	tokenPatterns map[string]*tokenPattern
+	tokenPatterns  map[string]*tokenPattern
+	redactPatterns []RedactPattern
 }
 
 // NewAIServiceDetector creates a new AI service API key detector
 func NewAIServiceDetector() *AIServiceDetector {
 	return &AIServiceDetector{
+		// Redaction patterns: specific before general (Anthropic before generic sk-)
+		redactPatterns: []RedactPattern{
+			{
+				Regex:       regexp.MustCompile(`sk-ant-[A-Za-z0-9_-]{20,}`),
+				Replacement: `[REDACTED-anthropic-key]`,
+				Label:       "REDACTED-anthropic-key",
+				Prefixes:    []string{"sk-ant-"},
+			},
+			{
+				Regex:       regexp.MustCompile(`sk-proj-[A-Za-z0-9_-]{20,}`),
+				Replacement: `[REDACTED-openai-key]`,
+				Label:       "REDACTED-openai-key",
+				Prefixes:    []string{"sk-proj-"},
+			},
+			{
+				Regex:       regexp.MustCompile(`sk-[A-Za-z0-9]{40,}`),
+				Replacement: `[REDACTED-openai-key]`,
+				Label:       "REDACTED-openai-key",
+				Prefixes:    []string{"sk-"},
+			},
+		},
 		tokenPatterns: map[string]*tokenPattern{
 			"openai": {
 				// Put hyphen at end of character class to avoid escaping issues
@@ -72,6 +94,11 @@ func (d *AIServiceDetector) Detect(content string, ctx *models.DetectionContext)
 	}
 
 	return findings
+}
+
+// Redact replaces AI service API keys in content with redaction markers.
+func (d *AIServiceDetector) Redact(content string) (string, map[string]int) {
+	return ApplyRedactPatterns(content, d.redactPatterns)
 }
 
 // createFinding creates a finding for a detected AI service API key

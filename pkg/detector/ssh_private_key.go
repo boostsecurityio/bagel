@@ -13,7 +13,8 @@ import (
 
 // SSHPrivateKeyDetector detects SSH private keys in content
 type SSHPrivateKeyDetector struct {
-	keyPattern *regexp.Regexp
+	keyPattern     *regexp.Regexp
+	redactPatterns []RedactPattern
 }
 
 // NewSSHPrivateKeyDetector creates a new SSH private key detector
@@ -24,6 +25,17 @@ func NewSSHPrivateKeyDetector() *SSHPrivateKeyDetector {
 
 	return &SSHPrivateKeyDetector{
 		keyPattern: pattern,
+		redactPatterns: []RedactPattern{
+			{
+				Regex: regexp.MustCompile(
+					`-----BEGIN\s+(?:RSA\s+|EC\s+|OPENSSH\s+|DSA\s+)?PRIVATE KEY-----` +
+						`[A-Za-z0-9+/=\s\\n]{20,}` +
+						`-----END\s+(?:RSA\s+|EC\s+|OPENSSH\s+|DSA\s+)?PRIVATE KEY-----`),
+				Replacement: `[REDACTED-ssh-private-key]`,
+				Label:       "REDACTED-ssh-private-key",
+				Prefixes:    []string{"-----BEGIN"},
+			},
+		},
 	}
 }
 
@@ -122,6 +134,11 @@ func (d *SSHPrivateKeyDetector) isEncrypted(keyContent string) bool {
 	}
 
 	return false
+}
+
+// Redact replaces SSH private keys in content with redaction markers.
+func (d *SSHPrivateKeyDetector) Redact(content string) (string, map[string]int) {
+	return ApplyRedactPatterns(content, d.redactPatterns)
 }
 
 // createFinding creates a finding for a detected SSH private key

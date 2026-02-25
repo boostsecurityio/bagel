@@ -12,12 +12,50 @@ import (
 
 // HTTPAuthDetector detects HTTP authentication credentials in various contexts
 type HTTPAuthDetector struct {
-	authPatterns map[string]*tokenPattern
+	authPatterns   map[string]*tokenPattern
+	redactPatterns []RedactPattern
 }
 
 // NewHTTPAuthDetector creates a new HTTP authentication detector
 func NewHTTPAuthDetector() *HTTPAuthDetector {
 	return &HTTPAuthDetector{
+		// Redaction patterns: Bearer+JWT before Bearer+generic, URL auth
+		redactPatterns: []RedactPattern{
+			{
+				Regex: regexp.MustCompile(
+					`Bearer\s+eyJ[A-Za-z0-9_-]{10,}\.eyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}`),
+				Replacement: `Bearer [REDACTED-jwt]`,
+				Label:       "REDACTED-jwt",
+				Prefixes:    []string{"Bearer"},
+			},
+			{
+				Regex: regexp.MustCompile(
+					`Bearer\s+[A-Za-z0-9_.\-/+=]{20,}`),
+				Replacement: `Bearer [REDACTED-bearer-token]`,
+				Label:       "REDACTED-bearer-token",
+				Prefixes:    []string{"Bearer"},
+			},
+			{
+				Regex: regexp.MustCompile(
+					`Basic\s+[A-Za-z0-9+/=]{20,}`),
+				Replacement: `Basic [REDACTED-basic-auth]`,
+				Label:       "REDACTED-basic-auth",
+				Prefixes:    []string{"Basic"},
+			},
+			{
+				Regex:       regexp.MustCompile(`(https?://)[^:"\s\\]+:[^@"\s\\]+(@)`),
+				Replacement: `${1}[REDACTED-basic-auth]${2}`,
+				Label:       "REDACTED-basic-auth",
+				Prefixes:    []string{"://"},
+			},
+			{
+				Regex: regexp.MustCompile(
+					`(?:X-API-Key|x-api-key|Authorization)[":\s]+[A-Za-z0-9_.\-/+=]{30,}`),
+				Replacement: `[REDACTED-api-key-header]`,
+				Label:       "REDACTED-api-key-header",
+				Prefixes:    []string{"X-API-Key", "x-api-key", "Authorization"},
+			},
+		},
 		authPatterns: map[string]*tokenPattern{
 			"bearer-token": {
 				// Matches: Authorization: Bearer <token>
@@ -71,6 +109,11 @@ func (d *HTTPAuthDetector) Detect(content string, ctx *models.DetectionContext) 
 	}
 
 	return findings
+}
+
+// Redact replaces HTTP auth credentials in content with redaction markers.
+func (d *HTTPAuthDetector) Redact(content string) (string, map[string]int) {
+	return ApplyRedactPatterns(content, d.redactPatterns)
 }
 
 // createFinding creates a finding for detected HTTP authentication credentials

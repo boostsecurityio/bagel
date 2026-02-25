@@ -17,6 +17,7 @@ type GenericAPIKeyDetector struct {
 	regex           *regexp.Regexp
 	minEntropy      float64
 	excludePatterns []*regexp.Regexp
+	redactPatterns  []RedactPattern
 }
 
 // NewGenericAPIKeyDetector creates a new generic API key detector
@@ -24,8 +25,9 @@ func NewGenericAPIKeyDetector() *GenericAPIKeyDetector {
 	pattern := `(?i)[\w.-]{0,50}?(?:access|auth|(?-i:[Aa]pi|API)|credential|creds|key|passw(?:or)?d|secret|token)(?:[ \t\w.-]{0,20})[\s'"]{0,3}(?:=|>|:{1,3}=|\|\||:|=>|\?=|,)[\x60'"\s=]{0,5}([\w.=-]{10,150}|[a-z0-9][a-z0-9+/]{11,}={0,3})(?:[\x60'"\s;]|\\[nr]|$)`
 
 	return &GenericAPIKeyDetector{
-		regex:      regexp.MustCompile(pattern),
-		minEntropy: 3.5,
+		regex:          regexp.MustCompile(pattern),
+		minEntropy:     3.5,
+		redactPatterns: nil, // Header-based API key redaction is handled by HTTPAuthDetector
 		excludePatterns: []*regexp.Regexp{
 			// Exclude common placeholders and examples
 			regexp.MustCompile(`(?i)^(your|my|the|example|sample|test|demo|placeholder|change|replace|insert|put)[-_]`),
@@ -117,6 +119,11 @@ func (d *GenericAPIKeyDetector) calculateEntropy(s string) float64 {
 	}
 
 	return entropy
+}
+
+// Redact replaces generic API keys in content with redaction markers.
+func (d *GenericAPIKeyDetector) Redact(content string) (string, map[string]int) {
+	return ApplyRedactPatterns(content, d.redactPatterns)
 }
 
 // createFinding creates a finding for a detected generic API key

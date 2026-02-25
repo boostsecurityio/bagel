@@ -10,13 +10,30 @@ import (
 	"testing"
 	"time"
 
+	"github.com/boostsecurityio/bagel/pkg/detector"
 	"github.com/rs/zerolog"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
-func TestScrubContent_Patterns(t *testing.T) {
+// newTestRegistry builds the same registry used by the scrub command.
+func newTestRegistry() *detector.Registry {
+	registry := detector.NewRegistry()
+	registry.Register(detector.NewSSHPrivateKeyDetector())
+	registry.Register(detector.NewHTTPAuthDetector())
+	registry.Register(detector.NewAIServiceDetector())
+	registry.Register(detector.NewCloudCredentialsDetector())
+	registry.Register(detector.NewSplunkTokenDetector())
+	registry.Register(detector.NewGitHubPATDetector())
+	registry.Register(detector.NewNPMTokenDetector())
+	registry.Register(detector.NewJWTDetector())
+	registry.Register(detector.NewGenericAPIKeyDetector())
+	return registry
+}
+
+func TestRedactAll_Patterns(t *testing.T) {
 	t.Parallel()
+	registry := newTestRegistry()
 
 	tests := []struct {
 		name      string
@@ -203,15 +220,16 @@ func TestScrubContent_Patterns(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			out, counts := ScrubContent(tt.input)
+			out, counts := registry.RedactAll(tt.input)
 			assert.Equal(t, tt.wantOut, out, "scrubbed output mismatch")
-			assert.Greater(t, counts[tt.wantLabel], 0, "expected label %s in counts", tt.wantLabel)
+			assert.Positive(t, counts[tt.wantLabel], "expected label %s in counts", tt.wantLabel)
 		})
 	}
 }
 
-func TestScrubContent_NegativeCases(t *testing.T) {
+func TestRedactAll_NegativeCases(t *testing.T) {
 	t.Parallel()
+	registry := newTestRegistry()
 
 	tests := []struct {
 		name  string
@@ -229,40 +247,43 @@ func TestScrubContent_NegativeCases(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			out, counts := ScrubContent(tt.input)
+			out, counts := registry.RedactAll(tt.input)
 			assert.Equal(t, tt.input, out, "should not modify non-matching input")
 			assert.Empty(t, counts, "should have zero counts")
 		})
 	}
 }
 
-func TestScrubContent_OrderingBearerJWT(t *testing.T) {
+func TestRedactAll_OrderingBearerJWT(t *testing.T) {
 	t.Parallel()
+	registry := newTestRegistry()
 
 	// Bearer + JWT should match as "Bearer [REDACTED-jwt]", not as
 	// "Bearer [REDACTED-bearer-token]" followed by standalone JWT redaction.
 	input := "Bearer eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.dozjgNryP4J3jVmNHl0w5N_XgL0n3I9PlFUP0THsR8U"
-	out, counts := ScrubContent(input)
+	out, counts := registry.RedactAll(input)
 
 	assert.Equal(t, "Bearer [REDACTED-jwt]", out)
 	assert.Equal(t, 1, counts["REDACTED-jwt"])
 	assert.Zero(t, counts["REDACTED-bearer-token"], "bearer-token should not match when JWT matches first")
 }
 
-func TestScrubContent_AnthropicBeforeGenericSK(t *testing.T) {
+func TestRedactAll_AnthropicBeforeGenericSK(t *testing.T) {
 	t.Parallel()
+	registry := newTestRegistry()
 
 	// sk-ant- should match as anthropic, not generic openai
 	input := "sk-ant-api03-abcdefghijklmnopqrstuvwxyz1234567890"
-	out, _ := ScrubContent(input)
+	out, _ := registry.RedactAll(input)
 	assert.Equal(t, "[REDACTED-anthropic-key]", out)
 }
 
-func TestScrubContent_MultipleSecrets(t *testing.T) {
+func TestRedactAll_MultipleSecrets(t *testing.T) {
 	t.Parallel()
+	registry := newTestRegistry()
 
 	input := "key1=AKIAIOSFODNN7EXAMPLE key2=ghp_" + repeatChar('X', 36)
-	out, counts := ScrubContent(input)
+	out, counts := registry.RedactAll(input)
 
 	assert.Contains(t, out, "[REDACTED-aws-access-key]")
 	assert.Contains(t, out, "[REDACTED-github-pat]")
@@ -270,12 +291,13 @@ func TestScrubContent_MultipleSecrets(t *testing.T) {
 	assert.Equal(t, 1, counts["REDACTED-github-pat"])
 }
 
-func TestScrubContent_JSONEmbedded(t *testing.T) {
+func TestRedactAll_JSONEmbedded(t *testing.T) {
 	t.Parallel()
+	registry := newTestRegistry()
 
 	// Secrets often appear inside JSON strings in JSONL logs
 	input := `{"token":"ghp_` + repeatChar('Z', 36) + `","user":"alice"}`
-	out, counts := ScrubContent(input)
+	out, counts := registry.RedactAll(input)
 
 	assert.Contains(t, out, "[REDACTED-github-pat]")
 	assert.Equal(t, 1, counts["REDACTED-github-pat"])
@@ -284,6 +306,7 @@ func TestScrubContent_JSONEmbedded(t *testing.T) {
 
 func TestScrubFile(t *testing.T) {
 	t.Parallel()
+	registry := newTestRegistry()
 
 	dir := t.TempDir()
 	path := filepath.Join(dir, "test.jsonl")
@@ -291,7 +314,7 @@ func TestScrubFile(t *testing.T) {
 	content := `{"key":"AKIAIOSFODNN7EXAMPLE","data":"safe"}`
 	require.NoError(t, os.WriteFile(path, []byte(content), 0600))
 
-	changed, counts, err := ScrubFile(path)
+	changed, counts, err := scrubFile(path, registry)
 	require.NoError(t, err)
 	assert.True(t, changed)
 	assert.Equal(t, 1, counts["REDACTED-aws-access-key"])
@@ -305,27 +328,29 @@ func TestScrubFile(t *testing.T) {
 
 func TestScrubFile_NoChanges(t *testing.T) {
 	t.Parallel()
+	registry := newTestRegistry()
 
 	dir := t.TempDir()
 	path := filepath.Join(dir, "clean.jsonl")
 
 	require.NoError(t, os.WriteFile(path, []byte(`{"safe":"data"}`), 0600))
 
-	changed, counts, err := ScrubFile(path)
+	changed, counts, err := scrubFile(path, registry)
 	require.NoError(t, err)
 	assert.False(t, changed)
-	assert.Empty(t, counts)
+	assert.Nil(t, counts)
 }
 
 func TestScrubFile_PreservesPermissions(t *testing.T) {
 	t.Parallel()
+	registry := newTestRegistry()
 
 	dir := t.TempDir()
 	path := filepath.Join(dir, "perms.jsonl")
 
 	require.NoError(t, os.WriteFile(path, []byte("AKIAIOSFODNN7EXAMPLE"), 0640))
 
-	_, _, err := ScrubFile(path)
+	_, _, err := scrubFile(path, registry)
 	require.NoError(t, err)
 
 	info, err := os.Stat(path)
@@ -408,6 +433,7 @@ func TestFindEligibleFiles_ShellHistory(t *testing.T) {
 
 func TestScan_FindsSecrets(t *testing.T) {
 	t.Parallel()
+	registry := newTestRegistry()
 
 	dir := t.TempDir()
 	path := filepath.Join(dir, "test.jsonl")
@@ -415,7 +441,7 @@ func TestScan_FindsSecrets(t *testing.T) {
 	require.NoError(t, os.WriteFile(path, []byte(content), 0600))
 
 	ctx := zerolog.Nop().WithContext(context.Background())
-	result, err := Scan(ctx, ScanInput{File: path})
+	result, err := Scan(ctx, ScanInput{File: path, Registry: registry})
 	require.NoError(t, err)
 
 	assert.Equal(t, 1, result.FilesScanned)
@@ -430,13 +456,14 @@ func TestScan_FindsSecrets(t *testing.T) {
 
 func TestScan_NoSecrets(t *testing.T) {
 	t.Parallel()
+	registry := newTestRegistry()
 
 	dir := t.TempDir()
 	path := filepath.Join(dir, "clean.jsonl")
 	require.NoError(t, os.WriteFile(path, []byte(`{"safe":"data"}`), 0600))
 
 	ctx := zerolog.Nop().WithContext(context.Background())
-	result, err := Scan(ctx, ScanInput{File: path})
+	result, err := Scan(ctx, ScanInput{File: path, Registry: registry})
 	require.NoError(t, err)
 
 	assert.Equal(t, 1, result.FilesScanned)
@@ -446,6 +473,7 @@ func TestScan_NoSecrets(t *testing.T) {
 
 func TestApply_ScrubsFiles(t *testing.T) {
 	t.Parallel()
+	registry := newTestRegistry()
 
 	dir := t.TempDir()
 	path := filepath.Join(dir, "test.jsonl")
@@ -453,7 +481,10 @@ func TestApply_ScrubsFiles(t *testing.T) {
 	require.NoError(t, os.WriteFile(path, []byte(content), 0600))
 
 	ctx := zerolog.Nop().WithContext(context.Background())
-	result, err := Apply(ctx, []string{path})
+	result, err := Apply(ctx, ApplyInput{
+		Files:    []string{path},
+		Registry: registry,
+	})
 	require.NoError(t, err)
 
 	assert.Equal(t, 1, result.FilesModified)
@@ -469,7 +500,7 @@ func TestApply_EmptyFileList(t *testing.T) {
 	t.Parallel()
 
 	ctx := zerolog.Nop().WithContext(context.Background())
-	result, err := Apply(ctx, nil)
+	result, err := Apply(ctx, ApplyInput{Registry: newTestRegistry()})
 	require.NoError(t, err)
 	assert.Equal(t, 0, result.FilesModified)
 }
@@ -479,9 +510,10 @@ func TestScan_FileNotFound(t *testing.T) {
 
 	ctx := zerolog.Nop().WithContext(context.Background())
 	_, err := Scan(ctx, ScanInput{
-		File: "/nonexistent/path.jsonl",
+		File:     "/nonexistent/path.jsonl",
+		Registry: newTestRegistry(),
 	})
-	assert.Error(t, err)
+	require.Error(t, err)
 	assert.Contains(t, err.Error(), "file not found")
 }
 

@@ -12,7 +12,8 @@ import (
 
 // NPMTokenDetector detects various NPM and Yarn authentication tokens
 type NPMTokenDetector struct {
-	tokenPatterns map[string]*tokenPattern
+	tokenPatterns  map[string]*tokenPattern
+	redactPatterns []RedactPattern
 }
 
 // NewNPMTokenDetector creates a new NPM token detector
@@ -23,6 +24,14 @@ func NewNPMTokenDetector() *NPMTokenDetector {
 				regex:       regexp.MustCompile(`(?i)\b(npm_[a-z0-9]{36})(?:[\x60'"\s;]|\\[nr]|$)`),
 				tokenType:   "npm-auth-token",
 				description: "NPM Authentication Token",
+			},
+		},
+		redactPatterns: []RedactPattern{
+			{
+				Regex:       regexp.MustCompile(`npm_[A-Za-z0-9]{36,}`),
+				Replacement: `[REDACTED-npm-token]`,
+				Label:       "REDACTED-npm-token",
+				Prefixes:    []string{"npm_"},
 			},
 		},
 	}
@@ -58,6 +67,11 @@ func (d *NPMTokenDetector) Detect(content string, ctx *models.DetectionContext) 
 	}
 
 	return findings
+}
+
+// Redact replaces NPM tokens in content with redaction markers.
+func (d *NPMTokenDetector) Redact(content string) (string, map[string]int) {
+	return ApplyRedactPatterns(content, d.redactPatterns)
 }
 
 // createFinding creates a finding for a detected NPM/Yarn token
