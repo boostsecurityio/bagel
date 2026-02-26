@@ -103,7 +103,7 @@ func (p *CloudProbe) Execute(ctx context.Context) ([]models.Finding, error) {
 
 // processCloudFile reads and analyzes a cloud credential file
 func (p *CloudProbe) processCloudFile(ctx context.Context, filePath string) []models.Finding {
-	var findings []models.Finding
+	findings := make([]models.Finding, 0, 4)
 
 	// Read file
 	content, err := os.ReadFile(filePath)

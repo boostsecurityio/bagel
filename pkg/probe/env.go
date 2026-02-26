@@ -129,7 +129,7 @@ func (p *EnvProbe) scanShellConfigFiles(ctx context.Context) []models.Finding {
 
 // processShellConfigFile reads and analyzes a shell configuration file
 func (p *EnvProbe) processShellConfigFile(ctx context.Context, filePath string) []models.Finding {
-	var findings []models.Finding
+	findings := make([]models.Finding, 0, 4)
 
 	// Read file contents
 	content, err := os.ReadFile(filePath)
@@ -156,10 +156,9 @@ func (p *EnvProbe) processShellConfigFile(ctx context.Context, filePath string) 
 
 // scanEnvFiles scans .env files for secrets and configuration issues
 func (p *EnvProbe) scanEnvFiles(ctx context.Context) []models.Finding {
-	var findings []models.Finding
-
 	// Get .env files from file index
 	envFiles := p.fileIndex.Get("env_files")
+	findings := make([]models.Finding, 0, len(envFiles))
 
 	log.Ctx(ctx).Debug().
 		Int("count", len(envFiles)).
@@ -175,7 +174,7 @@ func (p *EnvProbe) scanEnvFiles(ctx context.Context) []models.Finding {
 
 // processEnvFile reads and analyzes a .env file
 func (p *EnvProbe) processEnvFile(ctx context.Context, filePath string) []models.Finding {
-	var findings []models.Finding
+	findings := make([]models.Finding, 0, 4)
 
 	// Read file contents
 	content, err := os.ReadFile(filePath)

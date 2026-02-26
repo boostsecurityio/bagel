@@ -37,7 +37,7 @@ func (p *GHProbe) IsEnabled() bool {
 
 // Execute runs the GitHub CLI probe
 func (p *GHProbe) Execute(ctx context.Context) ([]models.Finding, error) {
-	var findings []models.Finding
+	findings := make([]models.Finding, 0, 1)
 
 	// Check if gh CLI is installed
 	ghPath, err := exec.LookPath("gh")

@@ -63,7 +63,7 @@ func (r *Registry) Register(d Detector) {
 // DetectAll runs all registered detectors against the content
 // The context parameter provides probe-specific metadata that gets included in findings
 func (r *Registry) DetectAll(content string, ctx *models.DetectionContext) []models.Finding {
-	var findings []models.Finding
+	findings := make([]models.Finding, 0, len(r.detectors))
 
 	for _, det := range r.detectors {
 		detectorFindings := det.Detect(content, ctx)

@@ -87,7 +87,7 @@ func (p *SSHProbe) Execute(ctx context.Context) ([]models.Finding, error) {
 
 // processSSHConfig reads and analyzes an SSH config file
 func (p *SSHProbe) processSSHConfig(ctx context.Context, configPath string) []models.Finding {
-	var findings []models.Finding
+	findings := make([]models.Finding, 0, 4)
 
 	// Read config file
 	content, err := os.ReadFile(configPath)

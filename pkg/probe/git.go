@@ -42,7 +42,7 @@ func (p *GitProbe) IsEnabled() bool {
 
 // Execute runs the Git probe
 func (p *GitProbe) Execute(ctx context.Context) ([]models.Finding, error) {
-	var findings []models.Finding
+	findings := make([]models.Finding, 0, 4)
 
 	// Get all global git config once
 	cmd := exec.CommandContext(ctx, "git", "config", "--list", "--global")
@@ -65,7 +65,7 @@ func (p *GitProbe) Execute(ctx context.Context) ([]models.Finding, error) {
 
 // checkGitConfig checks for insecure git configuration settings
 func (p *GitProbe) checkGitConfig(config map[string]string) []models.Finding {
-	var findings []models.Finding
+	findings := make([]models.Finding, 0, 4)
 
 	// Check for SSL verification disabled
 	findings = append(findings, p.checkSSLVerify(config)...)
@@ -324,7 +324,7 @@ func (p *GitProbe) checkHooksPath(config map[string]string) []models.Finding {
 
 // scanGitConfigForSecrets scans git config values for embedded secrets
 func (p *GitProbe) scanGitConfigForSecrets(config map[string]string) []models.Finding {
-	var findings []models.Finding
+	findings := make([]models.Finding, 0, len(config))
 
 	for configKey, configValue := range config {
 		// Run detectors on config values

@@ -80,7 +80,7 @@ func (p *NPMProbe) Execute(ctx context.Context) ([]models.Finding, error) {
 
 // processConfigFile reads and analyzes a single NPM/Yarn config file
 func (p *NPMProbe) processConfigFile(ctx context.Context, filePath string) []models.Finding {
-	var findings []models.Finding
+	findings := make([]models.Finding, 0, 4)
 
 	// Read file contents
 	content, err := os.ReadFile(filePath)
@@ -153,7 +153,7 @@ func parseNPMConfig(content string) map[string]string {
 
 // checkNPMConfig checks for insecure NPM/Yarn configuration settings
 func (p *NPMProbe) checkNPMConfig(filePath string, config map[string]string) []models.Finding {
-	var findings []models.Finding
+	findings := make([]models.Finding, 0, 4)
 
 	// Check for SSL verification disabled
 	findings = append(findings, p.checkStrictSSL(filePath, config)...)

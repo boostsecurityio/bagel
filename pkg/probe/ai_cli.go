@@ -121,7 +121,7 @@ func (p *AICliProbe) Execute(ctx context.Context) ([]models.Finding, error) {
 
 // processFile reads and analyzes an AI CLI adjacent file
 func (p *AICliProbe) processFile(ctx context.Context, filePath string) []models.Finding {
-	var findings []models.Finding
+	findings := make([]models.Finding, 0, 4)
 
 	// Read file
 	content, err := os.ReadFile(filePath)
