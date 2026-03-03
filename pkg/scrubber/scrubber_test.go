@@ -8,7 +8,6 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
-	"time"
 
 	"github.com/boostsecurityio/bagel/pkg/detector"
 	"github.com/rs/zerolog"
@@ -358,83 +357,7 @@ func TestScrubFile_PreservesPermissions(t *testing.T) {
 	assert.Equal(t, os.FileMode(0640), info.Mode().Perm())
 }
 
-func TestFindEligibleFiles(t *testing.T) {
-	// Cannot use t.Parallel() with t.Setenv
-	tmpHome := t.TempDir()
-	t.Setenv("HOME", tmpHome)
-	t.Setenv("USERPROFILE", tmpHome) // Windows: os.UserHomeDir reads USERPROFILE
-
-	claudeDir := filepath.Join(tmpHome, ".claude", "projects", "test-project")
-	require.NoError(t, os.MkdirAll(claudeDir, 0700))
-
-	// Create an old file (should be found)
-	oldFile := filepath.Join(claudeDir, "session.jsonl")
-	require.NoError(t, os.WriteFile(oldFile, []byte("data"), 0600))
-	oldTime := time.Now().Add(-2 * time.Hour)
-	require.NoError(t, os.Chtimes(oldFile, oldTime, oldTime))
-
-	// Create a recent file (should be skipped with default 60min grace)
-	newFile := filepath.Join(claudeDir, "active.jsonl")
-	require.NoError(t, os.WriteFile(newFile, []byte("data"), 0600))
-
-	ctx := zerolog.Nop().WithContext(context.Background())
-	files, err := FindEligibleFiles(ctx, 60)
-	require.NoError(t, err)
-
-	assert.Contains(t, files, oldFile, "old file should be eligible")
-	assert.NotContains(t, files, newFile, "recent file should be skipped")
-}
-
-func TestFindEligibleFiles_GraceZero(t *testing.T) {
-	// Cannot use t.Parallel() with t.Setenv
-	tmpHome := t.TempDir()
-	t.Setenv("HOME", tmpHome)
-	t.Setenv("USERPROFILE", tmpHome) // Windows: os.UserHomeDir reads USERPROFILE
-
-	claudeDir := filepath.Join(tmpHome, ".claude", "projects", "test")
-	require.NoError(t, os.MkdirAll(claudeDir, 0700))
-
-	f := filepath.Join(claudeDir, "session.jsonl")
-	require.NoError(t, os.WriteFile(f, []byte("data"), 0600))
-
-	ctx := zerolog.Nop().WithContext(context.Background())
-	files, err := FindEligibleFiles(ctx, 0)
-	require.NoError(t, err)
-	assert.Contains(t, files, f, "grace=0 should include all files")
-}
-
-func TestFindEligibleFiles_ShellHistory(t *testing.T) {
-	// Cannot use t.Parallel() with t.Setenv
-	tmpHome := t.TempDir()
-	t.Setenv("HOME", tmpHome)
-	t.Setenv("USERPROFILE", tmpHome) // Windows: os.UserHomeDir reads USERPROFILE
-
-	// Create shell history files directly in $HOME
-	bashHist := filepath.Join(tmpHome, ".bash_history")
-	zshHist := filepath.Join(tmpHome, ".zsh_history")
-	require.NoError(t, os.WriteFile(bashHist, []byte("ls\ncd /tmp"), 0600))
-	require.NoError(t, os.WriteFile(zshHist, []byte("git status"), 0600))
-	oldTime := time.Now().Add(-2 * time.Hour)
-	require.NoError(t, os.Chtimes(bashHist, oldTime, oldTime))
-	require.NoError(t, os.Chtimes(zshHist, oldTime, oldTime))
-
-	// Create fish history in subdirectory
-	fishDir := filepath.Join(tmpHome, ".local", "share", "fish")
-	require.NoError(t, os.MkdirAll(fishDir, 0700))
-	fishHist := filepath.Join(fishDir, "fish_history")
-	require.NoError(t, os.WriteFile(fishHist, []byte("- cmd: ls"), 0600))
-	require.NoError(t, os.Chtimes(fishHist, oldTime, oldTime))
-
-	ctx := zerolog.Nop().WithContext(context.Background())
-	files, err := FindEligibleFiles(ctx, 60)
-	require.NoError(t, err)
-
-	assert.Contains(t, files, bashHist, "bash history should be found")
-	assert.Contains(t, files, zshHist, "zsh history should be found")
-	assert.Contains(t, files, fishHist, "fish history should be found")
-}
-
-func TestScan_FindsSecrets(t *testing.T) {
+func TestPreview_FindsSecrets(t *testing.T) {
 	t.Parallel()
 	registry := newTestRegistry()
 
@@ -444,20 +367,23 @@ func TestScan_FindsSecrets(t *testing.T) {
 	require.NoError(t, os.WriteFile(path, []byte(content), 0600))
 
 	ctx := zerolog.Nop().WithContext(context.Background())
-	result, err := Scan(ctx, ScanInput{File: path, Registry: registry})
+	result, err := Preview(ctx, PreviewInput{
+		Files:    []string{path},
+		Registry: registry,
+	})
 	require.NoError(t, err)
 
 	assert.Equal(t, 1, result.FilesScanned)
 	assert.Equal(t, []string{path}, result.Files)
 	assert.Equal(t, 1, result.Redactions)
 
-	// Verify file was NOT modified (scan never writes)
+	// Verify file was NOT modified (preview never writes)
 	data, err := os.ReadFile(path)
 	require.NoError(t, err)
 	assert.Equal(t, content, string(data))
 }
 
-func TestScan_NoSecrets(t *testing.T) {
+func TestPreview_NoSecrets(t *testing.T) {
 	t.Parallel()
 	registry := newTestRegistry()
 
@@ -466,12 +392,27 @@ func TestScan_NoSecrets(t *testing.T) {
 	require.NoError(t, os.WriteFile(path, []byte(`{"safe":"data"}`), 0600))
 
 	ctx := zerolog.Nop().WithContext(context.Background())
-	result, err := Scan(ctx, ScanInput{File: path, Registry: registry})
+	result, err := Preview(ctx, PreviewInput{
+		Files:    []string{path},
+		Registry: registry,
+	})
 	require.NoError(t, err)
 
 	assert.Equal(t, 1, result.FilesScanned)
 	assert.Empty(t, result.Files)
 	assert.Equal(t, 0, result.Redactions)
+}
+
+func TestPreview_EmptyFileList(t *testing.T) {
+	t.Parallel()
+
+	ctx := zerolog.Nop().WithContext(context.Background())
+	result, err := Preview(ctx, PreviewInput{
+		Registry: newTestRegistry(),
+	})
+	require.NoError(t, err)
+	assert.Equal(t, 0, result.FilesScanned)
+	assert.Empty(t, result.Files)
 }
 
 func TestApply_ScrubsFiles(t *testing.T) {
@@ -506,18 +447,6 @@ func TestApply_EmptyFileList(t *testing.T) {
 	result, err := Apply(ctx, ApplyInput{Registry: newTestRegistry()})
 	require.NoError(t, err)
 	assert.Equal(t, 0, result.FilesModified)
-}
-
-func TestScan_FileNotFound(t *testing.T) {
-	t.Parallel()
-
-	ctx := zerolog.Nop().WithContext(context.Background())
-	_, err := Scan(ctx, ScanInput{
-		File:     "/nonexistent/path.jsonl",
-		Registry: newTestRegistry(),
-	})
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "file not found")
 }
 
 // -- helpers --

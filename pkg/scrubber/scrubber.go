@@ -10,92 +10,11 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
-	"time"
 
 	"github.com/boostsecurityio/bagel/pkg/detector"
 	"github.com/rs/zerolog"
 	"golang.org/x/sync/errgroup"
 )
-
-// sessionDir defines an AI CLI session directory and its file globs.
-type sessionDir struct {
-	RelPath  string
-	Patterns []string
-}
-
-// sessionDirs lists known AI CLI session log and shell history
-// locations relative to $HOME. An empty RelPath means files live
-// directly in $HOME (matched by name, not walked recursively).
-var sessionDirs = []sessionDir{
-	{RelPath: ".claude/projects", Patterns: []string{"*.jsonl", "*.txt"}},
-	{RelPath: ".codex/sessions", Patterns: []string{"*.jsonl"}},
-	{RelPath: ".gemini/tmp", Patterns: []string{"*.json"}},
-	{RelPath: ".local/share/opencode/storage", Patterns: []string{"*.json"}},
-	{RelPath: "", Patterns: []string{".bash_history", ".zsh_history", ".sh_history"}},
-	{RelPath: ".local/share/fish", Patterns: []string{"fish_history"}},
-}
-
-// FindEligibleFiles walks known AI CLI paths and returns files older
-// than graceMins minutes. Files modified within the grace period are
-// skipped to avoid interfering with active sessions.
-func FindEligibleFiles(ctx context.Context, graceMins int) ([]string, error) {
-	log := zerolog.Ctx(ctx)
-
-	home, err := os.UserHomeDir()
-	if err != nil {
-		return nil, fmt.Errorf("get home dir: %w", err)
-	}
-
-	cutoff := time.Now().Add(-time.Duration(graceMins) * time.Minute)
-	var files []string
-
-	for _, sd := range sessionDirs {
-		if sd.RelPath == "" {
-			// Direct file lookup in $HOME (no recursive walk).
-			for _, name := range sd.Patterns {
-				path := filepath.Join(home, name)
-				info, err := os.Stat(path)
-				if err != nil {
-					continue
-				}
-				if info.ModTime().Before(cutoff) {
-					files = append(files, path)
-				}
-			}
-			continue
-		}
-
-		base := filepath.Join(home, sd.RelPath)
-		if _, err := os.Stat(base); os.IsNotExist(err) {
-			continue
-		}
-
-		for _, glob := range sd.Patterns {
-			err := filepath.Walk(base, func(path string, info os.FileInfo, err error) error {
-				if err != nil {
-					log.Warn().Err(err).Str("path", path).Msg("Skipping unreadable entry")
-					return nil
-				}
-				if info.IsDir() {
-					return nil
-				}
-				matched, _ := filepath.Match(glob, info.Name())
-				if !matched {
-					return nil
-				}
-				if info.ModTime().Before(cutoff) {
-					files = append(files, path)
-				}
-				return nil
-			})
-			if err != nil {
-				return nil, fmt.Errorf("walk %s: %w", base, err)
-			}
-		}
-	}
-
-	return files, nil
-}
 
 // scrubFile reads a file, applies all registry redactions, and writes back.
 // Returns whether the file was modified and counts by label.
@@ -124,16 +43,15 @@ func scrubFile(path string, registry *detector.Registry) (bool, map[string]int, 
 	return true, counts, nil
 }
 
-// ScanInput configures a scrub scan.
-type ScanInput struct {
-	GraceMinutes int
-	File         string
-	Registry     *detector.Registry
+// PreviewInput configures a read-only scrub preview.
+type PreviewInput struct {
+	Files    []string
+	Registry *detector.Registry
 }
 
-// ScanResult holds the outcome of scanning files for credentials.
+// PreviewResult holds the outcome of previewing files for redactable content.
 // Files lists the paths that contain redactable content.
-type ScanResult struct {
+type PreviewResult struct {
 	FilesScanned int
 	Files        []string
 	Redactions   int
@@ -159,26 +77,18 @@ type fileResult struct {
 	counts  map[string]int
 }
 
-// Scan finds eligible files and counts what would be redacted.
-// It never writes to disk.
-func Scan(ctx context.Context, input ScanInput) (ScanResult, error) {
+// Preview reads files and counts what would be redacted without writing.
+func Preview(ctx context.Context, input PreviewInput) (PreviewResult, error) {
 	log := zerolog.Ctx(ctx)
-	result := ScanResult{CountsByType: make(map[string]int)}
+	result := PreviewResult{CountsByType: make(map[string]int)}
 
-	files, err := resolveFiles(ctx, input)
-	if err != nil {
-		return result, err
-	}
-
-	result.FilesScanned = len(files)
-	if len(files) == 0 {
-		log.Info().
-			Int("grace_minutes", input.GraceMinutes).
-			Msg("No eligible files found")
+	result.FilesScanned = len(input.Files)
+	if len(input.Files) == 0 {
+		log.Info().Msg("No files to preview")
 		return result, nil
 	}
 
-	log.Debug().Int("file_count", len(files)).Msg("Found eligible files")
+	log.Debug().Int("file_count", len(input.Files)).Msg("Previewing files")
 
 	processor := func(path string) (fileResult, error) {
 		data, err := os.ReadFile(path)
@@ -192,7 +102,7 @@ func Scan(ctx context.Context, input ScanInput) (ScanResult, error) {
 		return fileResult{}, nil
 	}
 
-	results, err := processFilesConcurrently(ctx, files, processor)
+	results, err := processFilesConcurrently(ctx, input.Files, processor)
 	if err != nil {
 		return result, err
 	}
@@ -201,7 +111,7 @@ func Scan(ctx context.Context, input ScanInput) (ScanResult, error) {
 		if !fr.changed {
 			continue
 		}
-		result.Files = append(result.Files, files[i])
+		result.Files = append(result.Files, input.Files[i])
 		mergeCounts(result.CountsByType, fr.counts)
 		result.Redactions += sumCounts(fr.counts)
 	}
@@ -210,7 +120,7 @@ func Scan(ctx context.Context, input ScanInput) (ScanResult, error) {
 }
 
 // Apply scrubs credential patterns from the given files, writing
-// changes back to disk. Call Scan first to discover which files
+// changes back to disk. Call Preview first to discover which files
 // need scrubbing.
 func Apply(ctx context.Context, input ApplyInput) (ApplyResult, error) {
 	log := zerolog.Ctx(ctx)
@@ -248,20 +158,6 @@ func Apply(ctx context.Context, input ApplyInput) (ApplyResult, error) {
 	}
 
 	return result, nil
-}
-
-func resolveFiles(ctx context.Context, input ScanInput) ([]string, error) {
-	if input.File != "" {
-		if _, err := os.Stat(input.File); err != nil {
-			return nil, fmt.Errorf("file not found: %s", input.File)
-		}
-		return []string{input.File}, nil
-	}
-	files, err := FindEligibleFiles(ctx, input.GraceMinutes)
-	if err != nil {
-		return nil, fmt.Errorf("find files: %w", err)
-	}
-	return files, nil
 }
 
 // fileProcessor is a function that processes a single file and

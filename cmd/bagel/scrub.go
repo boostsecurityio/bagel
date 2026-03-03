@@ -9,8 +9,13 @@ import (
 	"os"
 	"sort"
 	"strings"
+	"time"
 
+	"github.com/boostsecurityio/bagel/pkg/collector"
+	"github.com/boostsecurityio/bagel/pkg/config"
 	"github.com/boostsecurityio/bagel/pkg/detector"
+	"github.com/boostsecurityio/bagel/pkg/models"
+	"github.com/boostsecurityio/bagel/pkg/probe"
 	"github.com/boostsecurityio/bagel/pkg/scrubber"
 	"github.com/mattn/go-isatty"
 	"github.com/rs/zerolog"
@@ -94,20 +99,25 @@ func runScrub(cmd *cobra.Command, _ []string) error {
 
 	registry := newScrubRegistry()
 
-	// Phase 1: Scan
-	scanResult, err := scrubber.Scan(ctx, scrubber.ScanInput{
-		GraceMinutes: scrubGraceMinutes,
-		File:         scrubFile,
-		Registry:     registry,
+	// Resolve target files
+	files, err := resolveScrubFiles(cmd, registry)
+	if err != nil {
+		return err
+	}
+
+	// Phase 1: Preview
+	previewResult, err := scrubber.Preview(ctx, scrubber.PreviewInput{
+		Files:    files,
+		Registry: registry,
 	})
 	if err != nil {
-		return fmt.Errorf("scrub scan failed: %w", err)
+		return fmt.Errorf("scrub preview: %w", err)
 	}
 
 	fmt.Print("\n" + scopeWarning + "\n")
-	printScanSummary(scanResult)
+	printPreviewSummary(previewResult)
 
-	if scanResult.Redactions == 0 {
+	if previewResult.Redactions == 0 {
 		fmt.Println("Nothing to scrub.")
 		return nil
 	}
@@ -131,11 +141,11 @@ func runScrub(cmd *cobra.Command, _ []string) error {
 
 	// Phase 3: Apply
 	applyResult, err := scrubber.Apply(ctx, scrubber.ApplyInput{
-		Files:    scanResult.Files,
+		Files:    previewResult.Files,
 		Registry: registry,
 	})
 	if err != nil {
-		return fmt.Errorf("scrub apply failed: %w", err)
+		return fmt.Errorf("scrub apply: %w", err)
 	}
 
 	log.Info().
@@ -151,7 +161,100 @@ func runScrub(cmd *cobra.Command, _ []string) error {
 	return nil
 }
 
-func printScanSummary(r scrubber.ScanResult) {
+// resolveScrubFiles determines which files to scrub. When --file is set, it
+// targets that single file. Otherwise it runs the scan pipeline (FileIndex +
+// probes) and extracts file paths from findings.
+func resolveScrubFiles(cmd *cobra.Command, registry *detector.Registry) ([]string, error) {
+	if scrubFile != "" {
+		if _, err := os.Stat(scrubFile); err != nil {
+			return nil, fmt.Errorf("file not found: %s", scrubFile)
+		}
+		return []string{scrubFile}, nil
+	}
+
+	ctx := cmd.Context()
+
+	cfg, err := config.Load(cfgFile)
+	if err != nil {
+		return nil, fmt.Errorf("load config: %w", err)
+	}
+
+	probes := []probe.Probe{
+		probe.NewAICliProbe(cfg.Probes.AICli, registry),
+		probe.NewShellHistoryProbe(cfg.Probes.ShellHistory, registry),
+	}
+
+	col := collector.New(collector.NewInput{
+		Probes:     probes,
+		Config:     cfg,
+		NoCache:    true,
+		NoProgress: true,
+	})
+
+	result, err := col.Collect(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("scan: %w", err)
+	}
+
+	files := uniqueFilePaths(result.Findings)
+	files = filterByGracePeriod(files, scrubGraceMinutes)
+
+	return files, nil
+}
+
+// uniqueFilePaths extracts deduplicated file paths from findings.
+// Finding.Path uses the format "file:/path/to/file" (sometimes with
+// ":lineNum" appended by FormatSource); we strip the "file:" prefix.
+func uniqueFilePaths(findings []models.Finding) []string {
+	seen := make(map[string]struct{}, len(findings))
+	paths := make([]string, 0, len(findings))
+
+	for _, f := range findings {
+		p := f.Path
+		p, _ = strings.CutPrefix(p, "file:")
+
+		// Strip trailing ":lineNum" if present (e.g. "file:/path:42")
+		if idx := strings.LastIndex(p, ":"); idx > 0 {
+			candidate := p[:idx]
+			if _, err := os.Stat(candidate); err == nil {
+				p = candidate
+			}
+		}
+
+		if _, ok := seen[p]; ok {
+			continue
+		}
+		seen[p] = struct{}{}
+		paths = append(paths, p)
+	}
+
+	return paths
+}
+
+// filterByGracePeriod removes files modified within the last graceMins
+// minutes. Files with unreadable metadata are silently skipped.
+func filterByGracePeriod(files []string, graceMins int) []string {
+	if graceMins <= 0 {
+		return files
+	}
+
+	cutoff := time.Now().Add(-time.Duration(graceMins) * time.Minute)
+	filtered := make([]string, 0, len(files))
+
+	for _, path := range files {
+		info, err := os.Stat(path)
+		if err != nil {
+			continue
+		}
+		if info.ModTime().Before(cutoff) {
+			filtered = append(filtered, path)
+		}
+	}
+
+	return filtered
+}
+
+func printPreviewSummary(r scrubber.PreviewResult) {
 	fmt.Printf("Scan results:\n")
 	fmt.Printf("  Files scanned:       %d\n", r.FilesScanned)
 	fmt.Printf("  Files with secrets:  %d\n", len(r.Files))

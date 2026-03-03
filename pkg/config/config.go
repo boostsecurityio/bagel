@@ -157,6 +157,7 @@ func setDefaults(v *viper.Viper) {
 			".zsh_history",
 			".sh_history",
 			".history",
+			".local/share/fish/fish_history",
 			// PowerShell history (Windows)
 			"AppData/Roaming/Microsoft/Windows/PowerShell/PSReadLine/ConsoleHost_history.txt",
 		}, "type": "glob"},
