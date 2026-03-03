@@ -362,6 +362,7 @@ func TestFindEligibleFiles(t *testing.T) {
 	// Cannot use t.Parallel() with t.Setenv
 	tmpHome := t.TempDir()
 	t.Setenv("HOME", tmpHome)
+	t.Setenv("USERPROFILE", tmpHome) // Windows: os.UserHomeDir reads USERPROFILE
 
 	claudeDir := filepath.Join(tmpHome, ".claude", "projects", "test-project")
 	require.NoError(t, os.MkdirAll(claudeDir, 0700))
@@ -388,6 +389,7 @@ func TestFindEligibleFiles_GraceZero(t *testing.T) {
 	// Cannot use t.Parallel() with t.Setenv
 	tmpHome := t.TempDir()
 	t.Setenv("HOME", tmpHome)
+	t.Setenv("USERPROFILE", tmpHome) // Windows: os.UserHomeDir reads USERPROFILE
 
 	claudeDir := filepath.Join(tmpHome, ".claude", "projects", "test")
 	require.NoError(t, os.MkdirAll(claudeDir, 0700))
@@ -405,6 +407,7 @@ func TestFindEligibleFiles_ShellHistory(t *testing.T) {
 	// Cannot use t.Parallel() with t.Setenv
 	tmpHome := t.TempDir()
 	t.Setenv("HOME", tmpHome)
+	t.Setenv("USERPROFILE", tmpHome) // Windows: os.UserHomeDir reads USERPROFILE
 
 	// Create shell history files directly in $HOME
 	bashHist := filepath.Join(tmpHome, ".bash_history")
