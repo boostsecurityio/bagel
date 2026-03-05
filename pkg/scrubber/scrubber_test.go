@@ -7,6 +7,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 
 	"github.com/boostsecurityio/bagel/pkg/detector"
@@ -341,6 +342,9 @@ func TestScrubFile_NoChanges(t *testing.T) {
 }
 
 func TestScrubFile_PreservesPermissions(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Unix file permissions not supported on Windows")
+	}
 	t.Parallel()
 	registry := newTestRegistry()
 
