@@ -181,10 +181,11 @@ func (p *SSHProbe) checkSSHConfigContent(filePath string, content string) []mode
 			issueKey := "stricthostkeychecking-" + currentHost
 			if !reportedIssues[issueKey] {
 				findings = append(findings, models.Finding{
-					ID:       "ssh-strict-host-key-checking-disabled",
-					Probe:    p.Name(),
-					Severity: "high",
-					Title:    "SSH StrictHostKeyChecking Disabled",
+					ID:          "ssh-strict-host-key-checking-disabled",
+					Fingerprint: models.FingerprintFromFields("ssh-strict-host-key-checking-disabled", filePath, currentHost),
+					Probe:       p.Name(),
+					Severity:    "high",
+					Title:       "SSH StrictHostKeyChecking Disabled",
 					Message: fmt.Sprintf(
 						"SSH config disables host key verification (StrictHostKeyChecking=no) for host pattern '%s' at line %d. "+
 							"This makes you vulnerable to man-in-the-middle attacks. "+
@@ -210,10 +211,11 @@ func (p *SSHProbe) checkSSHConfigContent(filePath string, content string) []mode
 			issueKey := "userknownhostsfile-" + currentHost
 			if !reportedIssues[issueKey] {
 				findings = append(findings, models.Finding{
-					ID:       "ssh-known-hosts-disabled",
-					Probe:    p.Name(),
-					Severity: "high",
-					Title:    "SSH Known Hosts File Disabled",
+					ID:          "ssh-known-hosts-disabled",
+					Fingerprint: models.FingerprintFromFields("ssh-known-hosts-disabled", filePath, currentHost),
+					Probe:       p.Name(),
+					Severity:    "high",
+					Title:       "SSH Known Hosts File Disabled",
 					Message: fmt.Sprintf(
 						"SSH config disables host key verification (UserKnownHostsFile=%s) for host pattern '%s' at line %d. "+
 							"This makes you vulnerable to man-in-the-middle attacks. "+
@@ -259,12 +261,13 @@ func (p *SSHProbe) checkSSHConfigContent(filePath string, content string) []mode
 				}
 
 				findings = append(findings, models.Finding{
-					ID:       "ssh-forward-agent-enabled",
-					Probe:    p.Name(),
-					Severity: severity,
-					Title:    "SSH Agent Forwarding Enabled",
-					Message:  message,
-					Path:     filePath,
+					ID:          "ssh-forward-agent-enabled",
+					Fingerprint: models.FingerprintFromFields("ssh-forward-agent-enabled", filePath, currentHost),
+					Probe:       p.Name(),
+					Severity:    severity,
+					Title:       "SSH Agent Forwarding Enabled",
+					Message:     message,
+					Path:        filePath,
 					Metadata: map[string]interface{}{
 						"config_key":   "ForwardAgent",
 						"config_value": value,
@@ -305,10 +308,11 @@ func (p *SSHProbe) checkKeyPermissions(ctx context.Context, keyPath string) []mo
 	mode := fileInfo.Mode().Perm()
 	if mode&0077 != 0 { // Check if group or other have any permissions
 		findings = append(findings, models.Finding{
-			ID:       "ssh-key-insecure-permissions",
-			Probe:    p.Name(),
-			Severity: "high",
-			Title:    "SSH Private Key Has Insecure Permissions",
+			ID:          "ssh-key-insecure-permissions",
+			Fingerprint: models.FingerprintFromFields("ssh-key-insecure-permissions", keyPath),
+			Probe:       p.Name(),
+			Severity:    "high",
+			Title:       "SSH Private Key Has Insecure Permissions",
 			Message: "SSH private key " + filepath.Base(keyPath) + " has insecure file permissions (" +
 				mode.String() + "). " +
 				"Private keys should only be readable by the owner (permissions 0600 or 0400). " +

@@ -77,9 +77,10 @@ func (d *NPMTokenDetector) Redact(content string) (string, map[string]int) {
 // createFinding creates a finding for a detected NPM/Yarn token
 func (d *NPMTokenDetector) createFinding(token string, pattern *tokenPattern, ctx *models.DetectionContext) models.Finding {
 	return models.Finding{
-		ID:       "npm-token-" + pattern.tokenType,
-		Severity: "critical",
-		Title:    fmt.Sprintf("NPM Token Detected (%s)", pattern.description),
+		ID:          "npm-token-" + pattern.tokenType,
+		Fingerprint: models.Fingerprint(token),
+		Severity:    "critical",
+		Title:       fmt.Sprintf("NPM Token Detected (%s)", pattern.description),
 		Message: fmt.Sprintf(
 			"An %s was detected in %s. "+
 				"This credential provides access to NPM packages and registries. "+
@@ -93,7 +94,6 @@ func (d *NPMTokenDetector) createFinding(token string, pattern *tokenPattern, ct
 			"token_type":    pattern.tokenType,
 			"description":   pattern.description,
 			"token_length":  len(token),
-			"fingerprint":   Fingerprint(token),
 		},
 	}
 }

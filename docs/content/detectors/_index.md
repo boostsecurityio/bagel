@@ -42,11 +42,10 @@ Bagel reports **metadata about secrets**, never the actual values:
 ```json
 {
   "id": "github-token-classic-pat",
+  "fingerprint": "sha256:a1b2c3...",
   "severity": "critical",
   "path": "env:GITHUB_TOKEN",
-  "metadata": {
-    "fingerprint": "sha256:a1b2c3..."
-  }
+  "metadata": {}
 }
 ```
 

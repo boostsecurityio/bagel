@@ -120,9 +120,10 @@ func (d *GitHubTokenDetector) Redact(content string) (string, map[string]int) {
 // createFinding creates a finding for a detected GitHub token
 func (d *GitHubTokenDetector) createFinding(token string, pattern *tokenPattern, ctx *models.DetectionContext) models.Finding {
 	return models.Finding{
-		ID:       "github-token-" + pattern.tokenType,
-		Severity: "critical",
-		Title:    fmt.Sprintf("GitHub Token Detected (%s)", pattern.description),
+		ID:          "github-token-" + pattern.tokenType,
+		Fingerprint: models.Fingerprint(token),
+		Severity:    "critical",
+		Title:       fmt.Sprintf("GitHub Token Detected (%s)", pattern.description),
 		Message: fmt.Sprintf(
 			"A GitHub %s was detected in %s. "+
 				"This credential provides access to your GitHub account and/or repositories. ",
@@ -134,7 +135,6 @@ func (d *GitHubTokenDetector) createFinding(token string, pattern *tokenPattern,
 			"detector_name": d.Name(),
 			"token_type":    pattern.tokenType,
 			"description":   pattern.description,
-			"fingerprint":   Fingerprint(token),
 		},
 	}
 }

@@ -4,20 +4,11 @@
 package detector
 
 import (
-	"crypto/sha256"
-	"encoding/hex"
 	"regexp"
 	"strings"
 
 	"github.com/boostsecurityio/bagel/pkg/models"
 )
-
-// Fingerprint computes a SHA-256 hash of a secret for deduplication purposes.
-// This allows identifying the same secret across different locations without storing the actual value.
-func Fingerprint(secret string) string {
-	hash := sha256.Sum256([]byte(secret))
-	return hex.EncodeToString(hash[:])
-}
 
 // Detector defines the interface for secret/credential detectors
 type Detector interface {

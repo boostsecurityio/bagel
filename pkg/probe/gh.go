@@ -70,10 +70,11 @@ func (p *GHProbe) Execute(ctx context.Context) ([]models.Finding, error) {
 
 	// If we get here, gh auth token succeeded - there's an active session
 	findings = append(findings, models.Finding{
-		ID:       "gh-auth-token-present",
-		Probe:    p.Name(),
-		Severity: "medium",
-		Title:    "GitHub CLI Authentication Detected",
+		ID:          "gh-auth-token-present",
+		Fingerprint: models.FingerprintFromFields("gh-auth-token-present", ghPath),
+		Probe:       p.Name(),
+		Severity:    "medium",
+		Title:       "GitHub CLI Authentication Detected",
 		Message: "The GitHub CLI (gh) has an active authenticated session on this machine. " +
 			"If this machine is compromised, an attacker could use the gh CLI to access your GitHub account, " +
 			"repositories, and organization resources without needing to know your credentials. " +

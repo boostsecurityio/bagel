@@ -46,9 +46,10 @@ func (d *SplunkTokenDetector) Detect(
 	findings := make([]models.Finding, 0, len(matches))
 	for _, match := range matches {
 		findings = append(findings, models.Finding{
-			ID:       "splunk-session-token",
-			Severity: "critical",
-			Title:    "Splunk Session Token Detected",
+			ID:          "splunk-session-token",
+			Fingerprint: models.Fingerprint(match),
+			Severity:    "critical",
+			Title:       "Splunk Session Token Detected",
 			Message: fmt.Sprintf(
 				"A Splunk session token was detected in %s. "+
 					"This credential provides authenticated access to Splunk. "+
@@ -59,7 +60,6 @@ func (d *SplunkTokenDetector) Detect(
 			Metadata: map[string]interface{}{
 				"detector_name": d.Name(),
 				"token_type":    "splunk-session-token",
-				"fingerprint":   Fingerprint(match),
 			},
 		})
 	}

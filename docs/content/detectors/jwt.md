@@ -46,6 +46,7 @@ JWEs have five parts:
 ```json
 {
   "id": "jwt-jwt-token",
+  "fingerprint": "sha256:...",
   "probe": "shell_history",
   "severity": "critical",
   "title": "JWT Token Detected (JWT Token)",
@@ -53,8 +54,7 @@ JWEs have five parts:
   "path": "file:/Users/dev/.zsh_history",
   "metadata": {
     "detector_name": "jwt",
-    "token_type": "jwt-token",
-    "fingerprint": "sha256:..."
+    "token_type": "jwt-token"
   }
 }
 ```

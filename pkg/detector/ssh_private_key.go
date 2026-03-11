@@ -171,16 +171,16 @@ func (d *SSHPrivateKeyDetector) createFinding(keyContent, keyType string, isEncr
 	}
 
 	return models.Finding{
-		ID:       "ssh-private-key-" + strings.ToLower(keyType),
-		Severity: severity,
-		Title:    title,
-		Message:  message,
-		Path:     ctx.Source,
+		ID:          "ssh-private-key-" + strings.ToLower(keyType),
+		Fingerprint: models.Fingerprint(keyContent),
+		Severity:    severity,
+		Title:       title,
+		Message:     message,
+		Path:        ctx.Source,
 		Metadata: map[string]interface{}{
 			"detector_name": d.Name(),
 			"key_type":      keyType,
 			"is_encrypted":  isEncrypted,
-			"fingerprint":   Fingerprint(keyContent),
 		},
 	}
 }

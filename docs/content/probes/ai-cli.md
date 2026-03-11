@@ -64,6 +64,7 @@ Any detector in the registry can produce findings from AI CLI files.
 ```json
 {
   "id": "ai-service-openai-api-key",
+  "fingerprint": "sha256:...",
   "probe": "ai_cli",
   "severity": "critical",
   "title": "AI Service API Key Detected (OpenAI API Key)",
@@ -71,8 +72,7 @@ Any detector in the registry can produce findings from AI CLI files.
   "path": "file:/Users/dev/.codex/auth.json",
   "metadata": {
     "detector_name": "ai-service",
-    "token_type": "openai-api-key",
-    "fingerprint": "sha256:..."
+    "token_type": "openai-api-key"
   }
 }
 ```

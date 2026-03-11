@@ -114,12 +114,13 @@ func (p *GitProbe) checkSSLVerify(config map[string]string) []models.Finding {
 
 	if value, ok := config["http.sslverify"]; ok && strings.ToLower(value) == "false" {
 		findings = append(findings, models.Finding{
-			ID:       "git-ssl-verify-disabled",
-			Probe:    p.Name(),
-			Severity: "high",
-			Title:    "Git SSL Verification Disabled",
-			Message:  "Git is configured to skip SSL certificate verification (http.sslVerify=false). This makes you vulnerable to man-in-the-middle attacks when cloning or pulling from HTTPS repositories.",
-			Path:     "git-config:http.sslverify",
+			ID:          "git-ssl-verify-disabled",
+			Fingerprint: models.FingerprintFromFields("git-ssl-verify-disabled", "git-config:http.sslverify"),
+			Probe:       p.Name(),
+			Severity:    "high",
+			Title:       "Git SSL Verification Disabled",
+			Message:     "Git is configured to skip SSL certificate verification (http.sslVerify=false). This makes you vulnerable to man-in-the-middle attacks when cloning or pulling from HTTPS repositories.",
+			Path:        "git-config:http.sslverify",
 			Metadata: map[string]interface{}{
 				"config_key":   "http.sslverify",
 				"config_value": value,
@@ -139,12 +140,13 @@ func (p *GitProbe) checkSSHConfig(config map[string]string) []models.Finding {
 		if strings.Contains(strings.ToLower(value), "stricthostkeychecking=no") ||
 			strings.Contains(strings.ToLower(value), "stricthostkeychecking no") {
 			findings = append(findings, models.Finding{
-				ID:       "git-ssh-no-host-key-check",
-				Probe:    p.Name(),
-				Severity: "high",
-				Title:    "Git SSH Host Key Checking Disabled",
-				Message:  "Git is configured to skip SSH host key verification. This makes you vulnerable to man-in-the-middle attacks when connecting to Git repositories over SSH.",
-				Path:     "git-config:core.sshcommand",
+				ID:          "git-ssh-no-host-key-check",
+				Fingerprint: models.FingerprintFromFields("git-ssh-no-host-key-check", "git-config:core.sshcommand"),
+				Probe:       p.Name(),
+				Severity:    "high",
+				Title:       "Git SSH Host Key Checking Disabled",
+				Message:     "Git is configured to skip SSH host key verification. This makes you vulnerable to man-in-the-middle attacks when connecting to Git repositories over SSH.",
+				Path:        "git-config:core.sshcommand",
 				Metadata: map[string]interface{}{
 					"config_key":   "core.sshcommand",
 					"config_value": value,
@@ -164,12 +166,13 @@ func (p *GitProbe) checkSSHConfig(config map[string]string) []models.Finding {
 		}
 		if knownHostsPath != "" && IsNullDevice(knownHostsPath) {
 			findings = append(findings, models.Finding{
-				ID:       "git-ssh-no-known-hosts",
-				Probe:    p.Name(),
-				Severity: "high",
-				Title:    "Git SSH Known Hosts Disabled",
-				Message:  "Git is configured to ignore the SSH known_hosts file, preventing host key verification.",
-				Path:     "git-config:core.sshcommand",
+				ID:          "git-ssh-no-known-hosts",
+				Fingerprint: models.FingerprintFromFields("git-ssh-no-known-hosts", "git-config:core.sshcommand"),
+				Probe:       p.Name(),
+				Severity:    "high",
+				Title:       "Git SSH Known Hosts Disabled",
+				Message:     "Git is configured to ignore the SSH known_hosts file, preventing host key verification.",
+				Path:        "git-config:core.sshcommand",
 				Metadata: map[string]interface{}{
 					"config_key":   "core.sshcommand",
 					"config_value": value,
@@ -196,12 +199,13 @@ func (p *GitProbe) checkCredentialStorage(config map[string]string) []models.Fin
 				credPath = filepath.Join(home, ".git-credentials")
 			}
 			findings = append(findings, models.Finding{
-				ID:       "git-credential-plaintext",
-				Probe:    p.Name(),
-				Severity: "high",
-				Title:    "Git Credentials Stored in Plaintext",
-				Message:  "Git is configured to store credentials in plaintext on disk (" + credPath + "). These credentials can be easily accessed by any process or user with filesystem access.",
-				Path:     "git-config:credential.helper",
+				ID:          "git-credential-plaintext",
+				Fingerprint: models.FingerprintFromFields("git-credential-plaintext", "git-config:credential.helper"),
+				Probe:       p.Name(),
+				Severity:    "high",
+				Title:       "Git Credentials Stored in Plaintext",
+				Message:     "Git is configured to store credentials in plaintext on disk (" + credPath + "). These credentials can be easily accessed by any process or user with filesystem access.",
+				Path:        "git-config:credential.helper",
 				Metadata: map[string]interface{}{
 					"config_key":   "credential.helper",
 					"config_value": value,
@@ -227,12 +231,13 @@ func (p *GitProbe) checkProtocolSettings(config map[string]string) []models.Find
 				for _, dangerous := range dangerousProtocols {
 					if strings.ToLower(protocol) == dangerous {
 						findings = append(findings, models.Finding{
-							ID:       "git-dangerous-protocol",
-							Probe:    p.Name(),
-							Severity: "medium",
-							Title:    "Git Dangerous Protocol Enabled",
-							Message:  "Git is configured to always allow the '" + protocol + "' protocol, which can be used to execute arbitrary commands or access local files.",
-							Path:     "git-config:" + key,
+							ID:          "git-dangerous-protocol",
+							Fingerprint: models.FingerprintFromFields("git-dangerous-protocol", "git-config:"+key),
+							Probe:       p.Name(),
+							Severity:    "medium",
+							Title:       "Git Dangerous Protocol Enabled",
+							Message:     "Git is configured to always allow the '" + protocol + "' protocol, which can be used to execute arbitrary commands or access local files.",
+							Path:        "git-config:" + key,
 							Metadata: map[string]interface{}{
 								"config_key":   key,
 								"config_value": value,
@@ -257,12 +262,13 @@ func (p *GitProbe) checkFsckSettings(config map[string]string) []models.Finding 
 	for _, key := range fsckKeys {
 		if value, ok := config[key]; ok && strings.ToLower(value) == "false" {
 			findings = append(findings, models.Finding{
-				ID:       "git-fsck-disabled",
-				Probe:    p.Name(),
-				Severity: "medium",
-				Title:    "Git Object Verification Disabled",
-				Message:  "Git is configured to skip object verification (" + key + "=false). This could allow corrupted or malicious objects to be accepted.",
-				Path:     "git-config:" + key,
+				ID:          "git-fsck-disabled",
+				Fingerprint: models.FingerprintFromFields("git-fsck-disabled", "git-config:"+key),
+				Probe:       p.Name(),
+				Severity:    "medium",
+				Title:       "Git Object Verification Disabled",
+				Message:     "Git is configured to skip object verification (" + key + "=false). This could allow corrupted or malicious objects to be accepted.",
+				Path:        "git-config:" + key,
 				Metadata: map[string]interface{}{
 					"config_key":   key,
 					"config_value": value,
@@ -283,12 +289,13 @@ func (p *GitProbe) checkProxySettings(config map[string]string) []models.Finding
 	for _, key := range proxyKeys {
 		if value, ok := config[key]; ok && value != "" {
 			findings = append(findings, models.Finding{
-				ID:       "git-proxy-configured",
-				Probe:    p.Name(),
-				Severity: "low",
-				Title:    "Git Proxy Configured",
-				Message:  "Git is configured to use a proxy (" + key + "). Ensure this proxy is trusted, as it can intercept all Git traffic.",
-				Path:     "git-config:" + key,
+				ID:          "git-proxy-configured",
+				Fingerprint: models.FingerprintFromFields("git-proxy-configured", "git-config:"+key),
+				Probe:       p.Name(),
+				Severity:    "low",
+				Title:       "Git Proxy Configured",
+				Message:     "Git is configured to use a proxy (" + key + "). Ensure this proxy is trusted, as it can intercept all Git traffic.",
+				Path:        "git-config:" + key,
 				Metadata: map[string]interface{}{
 					"config_key":   key,
 					"config_value": value,
@@ -306,12 +313,13 @@ func (p *GitProbe) checkHooksPath(config map[string]string) []models.Finding {
 
 	if value, ok := config["core.hookspath"]; ok && value != "" {
 		findings = append(findings, models.Finding{
-			ID:       "git-custom-hooks-path",
-			Probe:    p.Name(),
-			Severity: "medium",
-			Title:    "Custom Git Hooks Path Configured",
-			Message:  "Git is configured to use a custom hooks directory. This could be used to execute malicious code during Git operations.",
-			Path:     "git-config:core.hookspath",
+			ID:          "git-custom-hooks-path",
+			Fingerprint: models.FingerprintFromFields("git-custom-hooks-path", "git-config:core.hookspath"),
+			Probe:       p.Name(),
+			Severity:    "medium",
+			Title:       "Custom Git Hooks Path Configured",
+			Message:     "Git is configured to use a custom hooks directory. This could be used to execute malicious code during Git operations.",
+			Path:        "git-config:core.hookspath",
 			Metadata: map[string]interface{}{
 				"config_key":   "core.hookspath",
 				"config_value": value,

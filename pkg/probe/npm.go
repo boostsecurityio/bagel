@@ -173,10 +173,11 @@ func (p *NPMProbe) checkStrictSSL(filePath string, config map[string]string) []m
 
 	if value, ok := config["strict-ssl"]; ok && strings.ToLower(value) == "false" {
 		findings = append(findings, models.Finding{
-			ID:       "npm-ssl-verify-disabled",
-			Probe:    p.Name(),
-			Severity: "high",
-			Title:    "NPM SSL Verification Disabled",
+			ID:          "npm-ssl-verify-disabled",
+			Fingerprint: models.FingerprintFromFields("npm-ssl-verify-disabled", filePath),
+			Probe:       p.Name(),
+			Severity:    "high",
+			Title:       "NPM SSL Verification Disabled",
 			Message: "NPM is configured to skip SSL certificate verification (strict-ssl=false). " +
 				"This makes you vulnerable to man-in-the-middle attacks when installing packages from registries.",
 			Path: filePath,
@@ -199,10 +200,11 @@ func (p *NPMProbe) checkInsecureRegistry(filePath string, config map[string]stri
 		if key == "registry" || strings.Contains(key, "registry") {
 			if strings.HasPrefix(value, "http://") {
 				findings = append(findings, models.Finding{
-					ID:       "npm-insecure-registry",
-					Probe:    p.Name(),
-					Severity: "high",
-					Title:    "NPM Insecure Registry Configured",
+					ID:          "npm-insecure-registry",
+					Fingerprint: models.FingerprintFromFields("npm-insecure-registry", filePath, key),
+					Probe:       p.Name(),
+					Severity:    "high",
+					Title:       "NPM Insecure Registry Configured",
 					Message: "NPM is configured to use an insecure HTTP registry. " +
 						"This allows packages to be intercepted or modified in transit. Use HTTPS registries only.",
 					Path: filePath,
@@ -225,10 +227,11 @@ func (p *NPMProbe) checkAlwaysAuth(filePath string, config map[string]string) []
 	if value, ok := config["always-auth"]; ok && strings.ToLower(value) == "true" {
 		// This is informational - always-auth can be legitimate but worth noting
 		findings = append(findings, models.Finding{
-			ID:       "npm-always-auth-enabled",
-			Probe:    p.Name(),
-			Severity: "low",
-			Title:    "NPM Always-Auth Enabled",
+			ID:          "npm-always-auth-enabled",
+			Fingerprint: models.FingerprintFromFields("npm-always-auth-enabled", filePath),
+			Probe:       p.Name(),
+			Severity:    "low",
+			Title:       "NPM Always-Auth Enabled",
 			Message: "NPM is configured to always require authentication (always-auth=true). " +
 				"While this can be secure, ensure your authentication tokens are properly protected " +
 				"and not accidentally committed to version control.",

@@ -29,18 +29,14 @@ func TestDeduplicateFindings(t *testing.T) {
 		result := &models.ScanResult{
 			Findings: []models.Finding{
 				{
-					ID:   "finding-1",
-					Path: "file1.txt",
-					Metadata: map[string]interface{}{
-						"fingerprint": "abc123",
-					},
+					ID:          "finding-1",
+					Fingerprint: "abc123",
+					Path:        "file1.txt",
 				},
 				{
-					ID:   "finding-2",
-					Path: "file2.txt",
-					Metadata: map[string]interface{}{
-						"fingerprint": "def456",
-					},
+					ID:          "finding-2",
+					Fingerprint: "def456",
+					Path:        "file2.txt",
 				},
 			},
 		}
@@ -54,25 +50,23 @@ func TestDeduplicateFindings(t *testing.T) {
 		result := &models.ScanResult{
 			Findings: []models.Finding{
 				{
-					ID:   "finding-1",
-					Path: "env:GITHUB_TOKEN",
-					Metadata: map[string]interface{}{
-						"fingerprint": "same-fingerprint",
-					},
+					ID:          "finding-1",
+					Fingerprint: "same-fingerprint",
+					Path:        "env:GITHUB_TOKEN",
 				},
 				{
-					ID:   "finding-1",
-					Path: "file:.bashrc",
+					ID:          "finding-1",
+					Fingerprint: "same-fingerprint",
+					Path:        "file:.bashrc",
 					Metadata: map[string]interface{}{
-						"fingerprint": "same-fingerprint",
 						"line_number": 42,
 					},
 				},
 				{
-					ID:   "finding-1",
-					Path: "file:.zshrc",
+					ID:          "finding-1",
+					Fingerprint: "same-fingerprint",
+					Path:        "file:.zshrc",
 					Metadata: map[string]interface{}{
-						"fingerprint": "same-fingerprint",
 						"line_number": 10,
 					},
 				},
@@ -109,23 +103,18 @@ func TestDeduplicateFindings(t *testing.T) {
 		result := &models.ScanResult{
 			Findings: []models.Finding{
 				{
-					ID:   "secret-1",
-					Path: "file1.txt",
-					Metadata: map[string]interface{}{
-						"fingerprint": "fp1",
-					},
+					ID:          "secret-1",
+					Fingerprint: "fp1",
+					Path:        "file1.txt",
 				},
 				{
-					ID:       "config-issue",
-					Path:     "config.yaml",
-					Metadata: map[string]interface{}{},
+					ID:   "config-issue",
+					Path: "config.yaml",
 				},
 				{
-					ID:   "secret-1",
-					Path: "file2.txt",
-					Metadata: map[string]interface{}{
-						"fingerprint": "fp1",
-					},
+					ID:          "secret-1",
+					Fingerprint: "fp1",
+					Path:        "file2.txt",
 				},
 			},
 		}

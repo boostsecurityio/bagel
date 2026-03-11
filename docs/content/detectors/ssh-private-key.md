@@ -58,6 +58,7 @@ If `bm9uZQ` (none) is found, the key is unencrypted.
 ```json
 {
   "id": "ssh-private-key-rsa",
+  "fingerprint": "sha256:...",
   "probe": "ssh",
   "severity": "critical",
   "title": "Unencrypted SSH Private Key Detected (RSA)",
@@ -65,8 +66,7 @@ If `bm9uZQ` (none) is found, the key is unencrypted.
   "path": "file:/Users/dev/.ssh/id_rsa",
   "metadata": {
     "key_type": "RSA",
-    "is_encrypted": false,
-    "fingerprint": "sha256:..."
+    "is_encrypted": false
   }
 }
 ```
@@ -76,6 +76,7 @@ If `bm9uZQ` (none) is found, the key is unencrypted.
 ```json
 {
   "id": "ssh-private-key-rsa",
+  "fingerprint": "sha256:...",
   "probe": "ssh",
   "severity": "low",
   "title": "Encrypted SSH Private Key Detected (RSA)",
@@ -83,8 +84,7 @@ If `bm9uZQ` (none) is found, the key is unencrypted.
   "path": "file:/Users/dev/.ssh/id_rsa",
   "metadata": {
     "key_type": "RSA",
-    "is_encrypted": true,
-    "fingerprint": "sha256:..."
+    "is_encrypted": true
   }
 }
 ```

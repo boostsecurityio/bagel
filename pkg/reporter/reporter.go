@@ -181,10 +181,10 @@ func deduplicateFindings(result *models.ScanResult) *models.ScanResult {
 	var dedupedFindings []models.Finding
 
 	for _, finding := range result.Findings {
-		fingerprint, hasFingerprint := finding.Metadata["fingerprint"].(string)
+		fingerprint := finding.Fingerprint
 
 		// If no fingerprint, keep the finding as-is (no dedup possible)
-		if !hasFingerprint || fingerprint == "" {
+		if fingerprint == "" {
 			dedupedFindings = append(dedupedFindings, finding)
 			continue
 		}

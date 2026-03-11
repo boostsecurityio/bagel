@@ -82,9 +82,10 @@ func (d *JWTDetector) Redact(content string) (string, map[string]int) {
 // createFinding creates a finding for detected JWT tokens
 func (d *JWTDetector) createFinding(credential string, pattern *tokenPattern, ctx *models.DetectionContext) models.Finding {
 	return models.Finding{
-		ID:       "jwt-" + pattern.tokenType,
-		Severity: "critical",
-		Title:    fmt.Sprintf("JWT Token Detected (%s)", pattern.description),
+		ID:          "jwt-" + pattern.tokenType,
+		Fingerprint: models.Fingerprint(credential),
+		Severity:    "critical",
+		Title:       fmt.Sprintf("JWT Token Detected (%s)", pattern.description),
 		Message: fmt.Sprintf(
 			"A %s was detected in %s. "+
 				"JWT tokens in plain text may be exposed in logs, shell history, configuration files, or source code. "+
@@ -98,7 +99,6 @@ func (d *JWTDetector) createFinding(credential string, pattern *tokenPattern, ct
 			"detector_name": d.Name(),
 			"token_type":    pattern.tokenType,
 			"description":   pattern.description,
-			"fingerprint":   Fingerprint(credential),
 		},
 	}
 }

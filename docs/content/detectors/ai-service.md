@@ -61,6 +61,7 @@ Organization-level API tokens.
 ```json
 {
   "id": "ai-service-openai-api-key",
+  "fingerprint": "sha256:...",
   "probe": "env",
   "severity": "critical",
   "title": "AI Service API Key Detected (OpenAI API Key)",
@@ -68,8 +69,7 @@ Organization-level API tokens.
   "path": "env:OPENAI_API_KEY",
   "metadata": {
     "detector_name": "ai-service",
-    "token_type": "openai-api-key",
-    "fingerprint": "sha256:..."
+    "token_type": "openai-api-key"
   }
 }
 ```

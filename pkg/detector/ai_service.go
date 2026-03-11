@@ -104,9 +104,10 @@ func (d *AIServiceDetector) Redact(content string) (string, map[string]int) {
 // createFinding creates a finding for a detected AI service API key
 func (d *AIServiceDetector) createFinding(token string, pattern *tokenPattern, ctx *models.DetectionContext) models.Finding {
 	return models.Finding{
-		ID:       "ai-service-" + pattern.tokenType,
-		Severity: "critical",
-		Title:    fmt.Sprintf("AI Service API Key Detected (%s)", pattern.description),
+		ID:          "ai-service-" + pattern.tokenType,
+		Fingerprint: models.Fingerprint(token),
+		Severity:    "critical",
+		Title:       fmt.Sprintf("AI Service API Key Detected (%s)", pattern.description),
 		Message: fmt.Sprintf(
 			"An %s was detected in %s. "+
 				"This credential provides access to AI services and may incur costs or expose sensitive data. "+
@@ -119,7 +120,6 @@ func (d *AIServiceDetector) createFinding(token string, pattern *tokenPattern, c
 			"detector_name": d.Name(),
 			"token_type":    pattern.tokenType,
 			"description":   pattern.description,
-			"fingerprint":   Fingerprint(token),
 		},
 	}
 }

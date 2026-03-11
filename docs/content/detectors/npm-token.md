@@ -29,6 +29,7 @@ NPM automation tokens follow a consistent format:
 ```json
 {
   "id": "npm-token-npm-auth-token",
+  "fingerprint": "sha256:...",
   "probe": "npm",
   "severity": "critical",
   "title": "NPM Token Detected (NPM Authentication Token)",
@@ -36,8 +37,7 @@ NPM automation tokens follow a consistent format:
   "path": "file:/Users/dev/.npmrc",
   "metadata": {
     "detector_name": "npm-token",
-    "token_type": "npm-auth-token",
-    "fingerprint": "sha256:..."
+    "token_type": "npm-auth-token"
   }
 }
 ```

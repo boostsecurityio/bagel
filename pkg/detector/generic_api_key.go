@@ -129,9 +129,10 @@ func (d *GenericAPIKeyDetector) Redact(content string) (string, map[string]int) 
 // createFinding creates a finding for a detected generic API key
 func (d *GenericAPIKeyDetector) createFinding(secret string, entropy float64, ctx *models.DetectionContext) models.Finding {
 	return models.Finding{
-		ID:       "generic-api-key",
-		Severity: "high",
-		Title:    "Generic API Key Detected",
+		ID:          "generic-api-key",
+		Fingerprint: models.Fingerprint(secret),
+		Severity:    "high",
+		Title:       "Generic API Key Detected",
 		Message: fmt.Sprintf(
 			"A generic API key or high-entropy secret was detected in %s (entropy: %.2f). ",
 			ctx.FormatSource(),
@@ -143,7 +144,6 @@ func (d *GenericAPIKeyDetector) createFinding(secret string, entropy float64, ct
 			"token_type":    "generic-api-key",
 			"entropy":       fmt.Sprintf("%.2f", entropy),
 			"description":   "Generic API Key or High-Entropy Secret",
-			"fingerprint":   Fingerprint(secret),
 		},
 	}
 }

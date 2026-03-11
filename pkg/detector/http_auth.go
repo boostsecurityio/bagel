@@ -119,9 +119,10 @@ func (d *HTTPAuthDetector) Redact(content string) (string, map[string]int) {
 // createFinding creates a finding for detected HTTP authentication credentials
 func (d *HTTPAuthDetector) createFinding(credential string, pattern *tokenPattern, ctx *models.DetectionContext) models.Finding {
 	return models.Finding{
-		ID:       "http-auth-" + pattern.tokenType,
-		Severity: "critical",
-		Title:    fmt.Sprintf("HTTP Authentication Credential Detected (%s)", pattern.description),
+		ID:          "http-auth-" + pattern.tokenType,
+		Fingerprint: models.Fingerprint(credential),
+		Severity:    "critical",
+		Title:       fmt.Sprintf("HTTP Authentication Credential Detected (%s)", pattern.description),
 		Message: fmt.Sprintf(
 			"A %s was detected in %s. "+
 				"HTTP authentication credentials in plain text may be exposed in logs, shell history, "+
@@ -135,7 +136,6 @@ func (d *HTTPAuthDetector) createFinding(credential string, pattern *tokenPatter
 			"detector_name": d.Name(),
 			"token_type":    pattern.tokenType,
 			"description":   pattern.description,
-			"fingerprint":   Fingerprint(credential),
 		},
 	}
 }

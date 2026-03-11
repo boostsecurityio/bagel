@@ -4,7 +4,10 @@
 package models
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
+	"strings"
 	"time"
 )
 
@@ -103,14 +106,29 @@ type SystemInfo struct {
 	Timezone      string    `json:"timezone,omitempty"`
 }
 
+// Fingerprint computes a SHA-256 hash of a value for deduplication purposes.
+// This allows identifying the same secret across different locations without storing the actual value.
+func Fingerprint(value string) string {
+	hash := sha256.Sum256([]byte(value))
+	return hex.EncodeToString(hash[:])
+}
+
+// FingerprintFromFields computes a fingerprint from multiple identifying fields joined by ":".
+// Use this for config-based findings where the fingerprint is derived from stable attributes
+// like finding ID, path, and other discriminating fields.
+func FingerprintFromFields(fields ...string) string {
+	return Fingerprint(strings.Join(fields, ":"))
+}
+
 // Finding represents a single security finding
 type Finding struct {
-	ID        string                 `json:"id"`
-	Probe     string                 `json:"probe"`
-	Severity  string                 `json:"severity"`
-	Title     string                 `json:"title"`
-	Message   string                 `json:"message"`
-	Path      string                 `json:"path,omitempty"`
-	Locations []string               `json:"locations,omitempty"` // Additional locations when deduplicated
-	Metadata  map[string]interface{} `json:"metadata,omitempty"`
+	ID          string                 `json:"id"`
+	Fingerprint string                 `json:"fingerprint"`
+	Probe       string                 `json:"probe"`
+	Severity    string                 `json:"severity"`
+	Title       string                 `json:"title"`
+	Message     string                 `json:"message"`
+	Path        string                 `json:"path,omitempty"`
+	Locations   []string               `json:"locations,omitempty"` // Additional locations when deduplicated
+	Metadata    map[string]interface{} `json:"metadata,omitempty"`
 }
