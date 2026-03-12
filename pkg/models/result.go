@@ -4,6 +4,7 @@
 package models
 
 import (
+	"crypto/hmac"
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
@@ -28,6 +29,10 @@ type DetectionContext struct {
 
 	// Extra allows probes to pass additional arbitrary metadata
 	Extra map[string]any
+
+	// FingerprintSalt is a machine-specific salt (os:arch:hostname:username)
+	// used by detectors to produce machine-unique secret fingerprints
+	FingerprintSalt string
 }
 
 // NewDetectionContext creates a new DetectionContext with required fields
@@ -106,11 +111,25 @@ type SystemInfo struct {
 	Timezone      string    `json:"timezone,omitempty"`
 }
 
+// FingerprintSalt returns a machine-specific salt derived from host identity fields.
+// Used by detectors to produce machine-unique secret fingerprints.
+func (h *HostInfo) FingerprintSalt() string {
+	return strings.Join([]string{h.OS, h.Arch, h.Hostname, h.Username}, ":")
+}
+
 // Fingerprint computes a SHA-256 hash of a value for deduplication purposes.
 // This allows identifying the same secret across different locations without storing the actual value.
 func Fingerprint(value string) string {
 	hash := sha256.Sum256([]byte(value))
 	return hex.EncodeToString(hash[:])
+}
+
+// SaltedFingerprint computes an HMAC-SHA256 of value using salt as the key.
+// Used by detectors to produce machine-unique fingerprints for detected secrets.
+func SaltedFingerprint(value, salt string) string {
+	mac := hmac.New(sha256.New, []byte(salt))
+	mac.Write([]byte(value))
+	return hex.EncodeToString(mac.Sum(nil))
 }
 
 // FingerprintFromFields computes a fingerprint from multiple identifying fields joined by ":".

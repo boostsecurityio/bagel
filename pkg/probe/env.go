@@ -41,6 +41,11 @@ func (p *EnvProbe) IsEnabled() bool {
 	return p.enabled
 }
 
+// SetFingerprintSalt sets the fingerprint salt on the detector registry (implements FingerprintSaltAware)
+func (p *EnvProbe) SetFingerprintSalt(salt string) {
+	p.detectorRegistry.SetFingerprintSalt(salt)
+}
+
 // SetFileIndex sets the file index for this probe (implements FileIndexAware)
 func (p *EnvProbe) SetFileIndex(index *fileindex.FileIndex) {
 	p.fileIndex = index

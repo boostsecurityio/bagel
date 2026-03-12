@@ -130,7 +130,7 @@ func (d *GenericAPIKeyDetector) Redact(content string) (string, map[string]int) 
 func (d *GenericAPIKeyDetector) createFinding(secret string, entropy float64, ctx *models.DetectionContext) models.Finding {
 	return models.Finding{
 		ID:          "generic-api-key",
-		Fingerprint: models.Fingerprint(secret),
+		Fingerprint: models.SaltedFingerprint(secret, ctx.FingerprintSalt),
 		Severity:    "high",
 		Title:       "Generic API Key Detected",
 		Message: fmt.Sprintf(

@@ -29,6 +29,13 @@ type FileIndexAware interface {
 	SetFileIndex(index *fileindex.FileIndex)
 }
 
+// FingerprintSaltAware is an optional interface that probes can implement
+// to receive the machine-specific fingerprint salt before execution
+type FingerprintSaltAware interface {
+	// SetFingerprintSalt provides the fingerprint salt to the probe
+	SetFingerprintSalt(salt string)
+}
+
 // Result represents the output of a probe execution
 type Result struct {
 	ProbeName string

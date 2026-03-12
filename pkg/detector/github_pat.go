@@ -121,7 +121,7 @@ func (d *GitHubTokenDetector) Redact(content string) (string, map[string]int) {
 func (d *GitHubTokenDetector) createFinding(token string, pattern *tokenPattern, ctx *models.DetectionContext) models.Finding {
 	return models.Finding{
 		ID:          "github-token-" + pattern.tokenType,
-		Fingerprint: models.Fingerprint(token),
+		Fingerprint: models.SaltedFingerprint(token, ctx.FingerprintSalt),
 		Severity:    "critical",
 		Title:       fmt.Sprintf("GitHub Token Detected (%s)", pattern.description),
 		Message: fmt.Sprintf(

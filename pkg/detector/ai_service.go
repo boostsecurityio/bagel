@@ -105,7 +105,7 @@ func (d *AIServiceDetector) Redact(content string) (string, map[string]int) {
 func (d *AIServiceDetector) createFinding(token string, pattern *tokenPattern, ctx *models.DetectionContext) models.Finding {
 	return models.Finding{
 		ID:          "ai-service-" + pattern.tokenType,
-		Fingerprint: models.Fingerprint(token),
+		Fingerprint: models.SaltedFingerprint(token, ctx.FingerprintSalt),
 		Severity:    "critical",
 		Title:       fmt.Sprintf("AI Service API Key Detected (%s)", pattern.description),
 		Message: fmt.Sprintf(

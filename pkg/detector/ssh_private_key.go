@@ -172,7 +172,7 @@ func (d *SSHPrivateKeyDetector) createFinding(keyContent, keyType string, isEncr
 
 	return models.Finding{
 		ID:          "ssh-private-key-" + strings.ToLower(keyType),
-		Fingerprint: models.Fingerprint(keyContent),
+		Fingerprint: models.SaltedFingerprint(keyContent, ctx.FingerprintSalt),
 		Severity:    severity,
 		Title:       title,
 		Message:     message,

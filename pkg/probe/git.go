@@ -40,6 +40,11 @@ func (p *GitProbe) IsEnabled() bool {
 	return p.enabled
 }
 
+// SetFingerprintSalt sets the fingerprint salt on the detector registry (implements FingerprintSaltAware)
+func (p *GitProbe) SetFingerprintSalt(salt string) {
+	p.detectorRegistry.SetFingerprintSalt(salt)
+}
+
 // Execute runs the Git probe
 func (p *GitProbe) Execute(ctx context.Context) ([]models.Finding, error) {
 	findings := make([]models.Finding, 0, 4)

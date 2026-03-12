@@ -47,7 +47,7 @@ func (d *SplunkTokenDetector) Detect(
 	for _, match := range matches {
 		findings = append(findings, models.Finding{
 			ID:          "splunk-session-token",
-			Fingerprint: models.Fingerprint(match),
+			Fingerprint: models.SaltedFingerprint(match, ctx.FingerprintSalt),
 			Severity:    "critical",
 			Title:       "Splunk Session Token Detected",
 			Message: fmt.Sprintf(

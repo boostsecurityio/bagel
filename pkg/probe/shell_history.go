@@ -43,6 +43,11 @@ func (p *ShellHistoryProbe) IsEnabled() bool {
 	return p.enabled
 }
 
+// SetFingerprintSalt sets the fingerprint salt on the detector registry (implements FingerprintSaltAware)
+func (p *ShellHistoryProbe) SetFingerprintSalt(salt string) {
+	p.detectorRegistry.SetFingerprintSalt(salt)
+}
+
 // SetFileIndex sets the file index for this probe (implements FileIndexAware)
 func (p *ShellHistoryProbe) SetFileIndex(index *fileindex.FileIndex) {
 	p.fileIndex = index

@@ -168,7 +168,7 @@ func (d *CloudCredentialsDetector) createFinding(credential string, pattern *tok
 
 	return models.Finding{
 		ID:          "cloud-credential-" + pattern.tokenType,
-		Fingerprint: models.Fingerprint(credential),
+		Fingerprint: models.SaltedFingerprint(credential, ctx.FingerprintSalt),
 		Severity:    severity,
 		Title:       fmt.Sprintf("Cloud Credential Detected (%s)", pattern.description),
 		Message:     message,

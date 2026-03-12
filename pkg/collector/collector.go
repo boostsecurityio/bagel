@@ -79,6 +79,14 @@ func (c *Collector) Collect(ctx context.Context) (*models.ScanResult, error) {
 		return nil, fmt.Errorf("failed to build file index: %w", err)
 	}
 
+	// Compute fingerprint salt from host identity and propagate to probes
+	salt := hostInfo.FingerprintSalt()
+	for _, p := range c.probes {
+		if saltAware, ok := p.(probe.FingerprintSaltAware); ok {
+			saltAware.SetFingerprintSalt(salt)
+		}
+	}
+
 	// Execute probes concurrently
 	results := c.executeProbes(ctx, fileIdx)
 
@@ -315,7 +323,7 @@ func (c *Collector) executeProbes(ctx context.Context, fileIdx *fileindex.FileIn
 func (c *Collector) getHostInfo(ctx context.Context) (*models.HostInfo, error) {
 	logger := zerolog.Ctx(ctx)
 
-	hostname, err := os.Hostname()
+	hostname, err := sysinfo.GetStableHostname()
 	if err != nil {
 		return nil, fmt.Errorf("get hostname: %w", err)
 	}

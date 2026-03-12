@@ -41,6 +41,11 @@ func (p *NPMProbe) IsEnabled() bool {
 	return p.enabled
 }
 
+// SetFingerprintSalt sets the fingerprint salt on the detector registry (implements FingerprintSaltAware)
+func (p *NPMProbe) SetFingerprintSalt(salt string) {
+	p.detectorRegistry.SetFingerprintSalt(salt)
+}
+
 // SetFileIndex sets the file index for this probe (implements FileIndexAware)
 func (p *NPMProbe) SetFileIndex(index *fileindex.FileIndex) {
 	p.fileIndex = index
