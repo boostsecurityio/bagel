@@ -134,12 +134,9 @@ func (d *GenericAPIKeyDetector) createFinding(secret string, entropy float64, ct
 		Fingerprint: models.SaltedFingerprint(secret, ctx.FingerprintSalt),
 		Severity:    "high",
 		Title:       "Generic API Key Detected",
-		Message: fmt.Sprintf(
-			"A generic API key or high-entropy secret was detected in %s (entropy: %.2f). ",
-			ctx.FormatSource(),
-			entropy,
-		),
-		Path: ctx.Source,
+		Description: "Generic API keys and high-entropy secrets can lead to unauthorized access if exposed.",
+		Message:     fmt.Sprintf("A high-entropy secret was detected in %s (entropy: %.2f).", ctx.FormatSource(), entropy),
+		Path:        ctx.Source,
 		Metadata: map[string]interface{}{
 			"detector_name": d.Name(),
 			"token_type":    "generic-api-key",

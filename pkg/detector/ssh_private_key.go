@@ -144,30 +144,17 @@ func (d *SSHPrivateKeyDetector) Redact(content string) (string, map[string]int) 
 // createFinding creates a finding for a detected SSH private key
 func (d *SSHPrivateKeyDetector) createFinding(keyContent, keyType string, isEncrypted bool, ctx *models.DetectionContext) models.Finding {
 	var severity string
-	var title string
-	var message string
+	var description string
 
 	if isEncrypted {
 		severity = "low"
-		title = fmt.Sprintf("Encrypted SSH Private Key Detected (%s)", keyType)
-		message = fmt.Sprintf(
-			"An encrypted %s SSH private key was detected in %s. "+
-				"The key is password-protected, which is a good security practice. "+
-				"Ensure the key file has appropriate permissions (0600) and the password is strong.",
-			keyType,
-			ctx.FormatSource(),
-		)
+		description = "This SSH private key is password-protected, which is a good security practice. " +
+			"Ensure the key file has appropriate permissions (0600) and the password is strong."
 	} else {
 		severity = "critical"
-		title = fmt.Sprintf("Unencrypted SSH Private Key Detected (%s)", keyType)
-		message = fmt.Sprintf(
-			"An unencrypted %s SSH private key was detected in %s. "+
-				"This key is NOT password-protected, which poses a significant security risk. "+
-				"Anyone with access to this file can use it to authenticate. "+
-				"Recommendation: Regenerate this key with a strong passphrase using 'ssh-keygen -p -f <keyfile>'.",
-			keyType,
-			ctx.FormatSource(),
-		)
+		description = "This SSH private key is NOT password-protected, which poses a significant security risk. " +
+			"Anyone with access to this file can use it to authenticate. " +
+			"Regenerate this key with a strong passphrase using 'ssh-keygen -p -f <keyfile>'."
 	}
 
 	return models.Finding{
@@ -175,8 +162,9 @@ func (d *SSHPrivateKeyDetector) createFinding(keyContent, keyType string, isEncr
 		Type:        models.FindingTypeSecret,
 		Fingerprint: models.SaltedFingerprint(keyContent, ctx.FingerprintSalt),
 		Severity:    severity,
-		Title:       title,
-		Message:     message,
+		Title:       "SSH Private Key Detected",
+		Description: description,
+		Message:     fmt.Sprintf("A %s SSH private key was detected in %s.", keyType, ctx.FormatSource()),
 		Path:        ctx.Source,
 		Metadata: map[string]interface{}{
 			"detector_name": d.Name(),

@@ -81,15 +81,11 @@ func (d *NPMTokenDetector) createFinding(token string, pattern *tokenPattern, ct
 		Type:        models.FindingTypeSecret,
 		Fingerprint: models.SaltedFingerprint(token, ctx.FingerprintSalt),
 		Severity:    "critical",
-		Title:       fmt.Sprintf("NPM Token Detected (%s)", pattern.description),
-		Message: fmt.Sprintf(
-			"An %s was detected in %s. "+
-				"This credential provides access to NPM packages and registries. "+
-				"Exposed tokens can allow unauthorized package publishing or access to private packages.",
-			pattern.description,
-			ctx.FormatSource(),
-		),
-		Path: ctx.Source,
+		Title:       "NPM Token Detected",
+		Description: "NPM tokens provide access to package registries. " +
+			"Exposed tokens allow unauthorized publishing or private package access.",
+		Message: fmt.Sprintf("A %s was detected in %s.", pattern.description, ctx.FormatSource()),
+		Path:    ctx.Source,
 		Metadata: map[string]interface{}{
 			"detector_name": d.Name(),
 			"token_type":    pattern.tokenType,

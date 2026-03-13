@@ -162,6 +162,7 @@ type Finding struct {
 	Probe       string                 `json:"probe"`
 	Severity    string                 `json:"severity"`
 	Title       string                 `json:"title"`
+	Description string                 `json:"description"`
 	Message     string                 `json:"message"`
 	Path        string                 `json:"path,omitempty"`
 	Locations   []string               `json:"locations,omitempty"` // Additional locations when deduplicated

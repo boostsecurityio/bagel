@@ -285,7 +285,7 @@ func TestCheckKeyPermissions(t *testing.T) {
 			if tt.wantCount > 0 {
 				assert.Equal(t, "ssh-key-insecure-permissions", findings[0].ID)
 				assert.Equal(t, "high", findings[0].Severity)
-				assert.Contains(t, findings[0].Message, "insecure file permissions")
+				assert.Contains(t, findings[0].Message, "has permissions")
 			}
 		})
 	}

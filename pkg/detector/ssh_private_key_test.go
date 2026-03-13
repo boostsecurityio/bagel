@@ -350,5 +350,5 @@ hwefhweufhweufhweufhweufhweufhweufhweufhweufhweufhweufhweufhwe
 	findings := detector.Detect(rsaKey, testCtx("file:test_key"))
 	require.Len(t, findings, 1)
 	assert.Equal(t, "critical", findings[0].Severity)
-	assert.Contains(t, findings[0].Title, "Unencrypted")
+	assert.Contains(t, findings[0].Description, "NOT password-protected")
 }

@@ -86,16 +86,11 @@ func (d *JWTDetector) createFinding(credential string, pattern *tokenPattern, ct
 		Type:        models.FindingTypeSecret,
 		Fingerprint: models.SaltedFingerprint(credential, ctx.FingerprintSalt),
 		Severity:    "critical",
-		Title:       fmt.Sprintf("JWT Token Detected (%s)", pattern.description),
-		Message: fmt.Sprintf(
-			"A %s was detected in %s. "+
-				"JWT tokens in plain text may be exposed in logs, shell history, configuration files, or source code. "+
-				"This could allow unauthorized access to protected resources. "+
-				"Use environment variables, secure credential storage, or secret management systems instead.",
-			pattern.description,
-			ctx.FormatSource(),
-		),
-		Path: ctx.Source,
+		Title:       "JWT Token Detected",
+		Description: "JWT tokens in plain text can be exposed in logs, shell history, or configuration files. " +
+			"Use secure credential storage or secret management systems instead.",
+		Message: fmt.Sprintf("A %s was detected in %s.", pattern.description, ctx.FormatSource()),
+		Path:    ctx.Source,
 		Metadata: map[string]interface{}{
 			"detector_name": d.Name(),
 			"token_type":    pattern.tokenType,

@@ -108,15 +108,11 @@ func (d *AIServiceDetector) createFinding(token string, pattern *tokenPattern, c
 		Type:        models.FindingTypeSecret,
 		Fingerprint: models.SaltedFingerprint(token, ctx.FingerprintSalt),
 		Severity:    "critical",
-		Title:       fmt.Sprintf("AI Service API Key Detected (%s)", pattern.description),
-		Message: fmt.Sprintf(
-			"An %s was detected in %s. "+
-				"This credential provides access to AI services and may incur costs or expose sensitive data. "+
-				"Revoke this key immediately and rotate with a new one stored securely.",
-			pattern.description,
-			ctx.FormatSource(),
-		),
-		Path: ctx.Source,
+		Title:       "AI Service API Key Detected",
+		Description: "AI service credentials provide access to paid services and may incur costs or expose sensitive data. " +
+			"Revoke this key immediately and rotate with a new one stored securely.",
+		Message: fmt.Sprintf("A %s was detected in %s.", pattern.description, ctx.FormatSource()),
+		Path:    ctx.Source,
 		Metadata: map[string]interface{}{
 			"detector_name": d.Name(),
 			"token_type":    pattern.tokenType,

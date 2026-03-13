@@ -192,14 +192,10 @@ func (p *SSHProbe) checkSSHConfigContent(filePath string, content string) []mode
 					Probe:       p.Name(),
 					Severity:    "high",
 					Title:       "SSH StrictHostKeyChecking Disabled",
-					Message: fmt.Sprintf(
-						"SSH config disables host key verification (StrictHostKeyChecking=no) for host pattern '%s' at line %d. "+
-							"This makes you vulnerable to man-in-the-middle attacks. "+
-							"Remove this setting or set it to 'yes' or 'ask'.",
-						currentHost,
-						lineNum+1,
-					),
-					Path: filePath,
+					Description: "Disabling host key verification makes you vulnerable to man-in-the-middle attacks. " +
+						"Remove this setting or set it to 'yes' or 'ask'.",
+					Message: fmt.Sprintf("Host pattern '%s' at line %d in %s: StrictHostKeyChecking=no", currentHost, lineNum+1, filePath),
+					Path:    filePath,
 					Metadata: map[string]interface{}{
 						"config_key":   "StrictHostKeyChecking",
 						"config_value": value,
@@ -223,15 +219,10 @@ func (p *SSHProbe) checkSSHConfigContent(filePath string, content string) []mode
 					Probe:       p.Name(),
 					Severity:    "high",
 					Title:       "SSH Known Hosts File Disabled",
-					Message: fmt.Sprintf(
-						"SSH config disables host key verification (UserKnownHostsFile=%s) for host pattern '%s' at line %d. "+
-							"This makes you vulnerable to man-in-the-middle attacks. "+
-							"Use the default known_hosts file or specify a valid path.",
-						value,
-						currentHost,
-						lineNum+1,
-					),
-					Path: filePath,
+					Description: "Disabling the known_hosts file prevents host key verification, enabling MITM attacks. " +
+						"Use the default known_hosts file or specify a valid path.",
+					Message: fmt.Sprintf("Host pattern '%s' at line %d in %s: UserKnownHostsFile=%s", currentHost, lineNum+1, filePath, value),
+					Path:    filePath,
 					Metadata: map[string]interface{}{
 						"config_key":   "UserKnownHostsFile",
 						"config_value": value,
@@ -247,24 +238,12 @@ func (p *SSHProbe) checkSSHConfigContent(filePath string, content string) []mode
 		if key == "forwardagent" && strings.ToLower(value) == "yes" {
 			issueKey := "forwardagent-" + currentHost
 			if !reportedIssues[issueKey] {
-				severity := "medium"
-				message := fmt.Sprintf(
-					"SSH agent forwarding is enabled (ForwardAgent=yes) for host pattern '%s' at line %d. "+
-						"This can be a security risk if you connect to untrusted hosts, "+
-						"as they could use your forwarded keys.",
-					currentHost,
-					lineNum+1,
-				)
+				description := "Agent forwarding lets remote hosts use your local SSH keys. " +
+					"This is risky with untrusted hosts."
 
-				// Global wildcard is more severe
+				// Global wildcard gets extra guidance
 				if currentHost == "*" {
-					message = fmt.Sprintf(
-						"SSH agent forwarding is enabled globally (ForwardAgent=yes) at line %d. "+
-							"This can be a security risk if you connect to untrusted hosts, "+
-							"as they could use your forwarded keys. "+
-							"Consider enabling it only for specific trusted hosts.",
-						lineNum+1,
-					)
+					description += " Consider enabling only for specific trusted hosts."
 				}
 
 				findings = append(findings, models.Finding{
@@ -272,9 +251,10 @@ func (p *SSHProbe) checkSSHConfigContent(filePath string, content string) []mode
 					Type:        models.FindingTypeMisconfiguration,
 					Fingerprint: models.FingerprintFromFields("ssh-forward-agent-enabled", filePath, currentHost),
 					Probe:       p.Name(),
-					Severity:    severity,
+					Severity:    "medium",
 					Title:       "SSH Agent Forwarding Enabled",
-					Message:     message,
+					Description: description,
+					Message:     fmt.Sprintf("Host pattern '%s' at line %d in %s: ForwardAgent=yes", currentHost, lineNum+1, filePath),
 					Path:        filePath,
 					Metadata: map[string]interface{}{
 						"config_key":   "ForwardAgent",
@@ -322,11 +302,10 @@ func (p *SSHProbe) checkKeyPermissions(ctx context.Context, keyPath string) []mo
 			Probe:       p.Name(),
 			Severity:    "high",
 			Title:       "SSH Private Key Has Insecure Permissions",
-			Message: "SSH private key " + filepath.Base(keyPath) + " has insecure file permissions (" +
-				mode.String() + "). " +
-				"Private keys should only be readable by the owner (permissions 0600 or 0400). " +
-				GetPermissionFixMessage(keyPath),
-			Path: keyPath,
+			Description: "SSH private keys should only be readable by the owner (permissions 0600 or 0400). " +
+				"Overly permissive keys can be read by other users or processes.",
+			Message: fmt.Sprintf("%s has permissions %s. %s", filepath.Base(keyPath), mode.String(), GetPermissionFixMessage(keyPath)),
+			Path:    keyPath,
 			Metadata: map[string]interface{}{
 				"current_permissions":  mode.String(),
 				"expected_permissions": "0600",

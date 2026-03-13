@@ -87,7 +87,7 @@ func TestHTTPAuthDetector_DetectBearerToken(t *testing.T) {
 				require.Len(t, findings, tt.expectedCount, "Expected to detect bearer token")
 				assert.Equal(t, tt.expectedID, findings[0].ID)
 				assert.Equal(t, "critical", findings[0].Severity)
-				assert.Contains(t, findings[0].Title, "Bearer Token")
+				assert.Contains(t, findings[0].Message, "Bearer Token")
 				assert.Equal(t, "http-authentication", findings[0].Metadata["detector_name"])
 			} else {
 				assert.Empty(t, findings, "Should not detect any credentials")
@@ -154,7 +154,7 @@ func TestHTTPAuthDetector_DetectBasicAuth(t *testing.T) {
 				require.Len(t, findings, tt.expectedCount, "Expected to detect basic auth")
 				assert.Equal(t, tt.expectedID, findings[0].ID)
 				assert.Equal(t, "critical", findings[0].Severity)
-				assert.Contains(t, findings[0].Title, "Basic Authentication")
+				assert.Contains(t, findings[0].Message, "Basic Authentication")
 				assert.Equal(t, "http-authentication", findings[0].Metadata["detector_name"])
 			} else {
 				assert.Empty(t, findings, "Should not detect any credentials")
@@ -230,7 +230,7 @@ func TestHTTPAuthDetector_DetectAPIKeyHeader(t *testing.T) {
 				require.Len(t, findings, tt.expectedCount, "Expected to detect API key")
 				assert.Equal(t, tt.expectedID, findings[0].ID)
 				assert.Equal(t, "critical", findings[0].Severity)
-				assert.Contains(t, findings[0].Title, "API Key")
+				assert.Contains(t, findings[0].Message, "API Key")
 				assert.Equal(t, "http-authentication", findings[0].Metadata["detector_name"])
 			} else {
 				assert.Empty(t, findings, "Should not detect any credentials")
@@ -309,7 +309,7 @@ func TestHTTPAuthDetector_DetectBasicAuthURL(t *testing.T) {
 				require.Len(t, findings, tt.expectedCount, "Expected to detect URL credentials")
 				assert.Equal(t, tt.expectedID, findings[0].ID)
 				assert.Equal(t, "critical", findings[0].Severity)
-				assert.Contains(t, findings[0].Title, "Basic Authentication in URL")
+				assert.Contains(t, findings[0].Message, "Basic Authentication in URL")
 				assert.Equal(t, "http-authentication", findings[0].Metadata["detector_name"])
 			} else {
 				assert.Empty(t, findings, "Should not detect any credentials")

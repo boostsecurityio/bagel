@@ -52,7 +52,7 @@ func TestAIServiceDetector_DetectOpenAI(t *testing.T) {
 				require.Len(t, findings, tt.expectedCount, "Expected to detect OpenAI key")
 				assert.Equal(t, tt.expectedID, findings[0].ID)
 				assert.Equal(t, "critical", findings[0].Severity)
-				assert.Contains(t, findings[0].Title, "OpenAI API Key")
+				assert.Contains(t, findings[0].Message, "OpenAI API Key")
 				assert.Equal(t, "ai-service", findings[0].Metadata["detector_name"])
 			} else {
 				assert.Empty(t, findings, "Should not detect any keys")
@@ -105,7 +105,7 @@ func TestAIServiceDetector_DetectAnthropic(t *testing.T) {
 				require.Len(t, findings, tt.expectedCount, "Expected to detect Anthropic key")
 				assert.Equal(t, tt.expectedID, findings[0].ID)
 				assert.Equal(t, "critical", findings[0].Severity)
-				assert.Contains(t, findings[0].Title, "Anthropic")
+				assert.Contains(t, findings[0].Message, "Anthropic")
 				assert.Equal(t, "ai-service", findings[0].Metadata["detector_name"])
 			} else {
 				assert.Empty(t, findings, "Should not detect any keys")
@@ -179,7 +179,7 @@ func TestAIServiceDetector_DetectHuggingFace(t *testing.T) {
 				require.Len(t, findings, tt.expectedCount, "Expected to detect Hugging Face token")
 				assert.Equal(t, tt.expectedID, findings[0].ID)
 				assert.Equal(t, "critical", findings[0].Severity)
-				assert.Contains(t, findings[0].Title, "Hugging Face")
+				assert.Contains(t, findings[0].Message, "Hugging Face")
 				assert.Equal(t, "ai-service", findings[0].Metadata["detector_name"])
 			} else {
 				assert.Empty(t, findings, "Should not detect any keys")

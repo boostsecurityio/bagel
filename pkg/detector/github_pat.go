@@ -124,14 +124,10 @@ func (d *GitHubTokenDetector) createFinding(token string, pattern *tokenPattern,
 		Type:        models.FindingTypeSecret,
 		Fingerprint: models.SaltedFingerprint(token, ctx.FingerprintSalt),
 		Severity:    "critical",
-		Title:       fmt.Sprintf("GitHub Token Detected (%s)", pattern.description),
-		Message: fmt.Sprintf(
-			"A GitHub %s was detected in %s. "+
-				"This credential provides access to your GitHub account and/or repositories. ",
-			pattern.description,
-			ctx.FormatSource(),
-		),
-		Path: ctx.Source,
+		Title:       "GitHub Token Detected",
+		Description: "GitHub tokens provide access to your account and repositories.",
+		Message:     fmt.Sprintf("A %s was detected in %s.", pattern.description, ctx.FormatSource()),
+		Path:        ctx.Source,
 		Metadata: map[string]interface{}{
 			"detector_name": d.Name(),
 			"token_type":    pattern.tokenType,

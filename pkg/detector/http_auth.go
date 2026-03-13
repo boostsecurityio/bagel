@@ -123,16 +123,11 @@ func (d *HTTPAuthDetector) createFinding(credential string, pattern *tokenPatter
 		Type:        models.FindingTypeSecret,
 		Fingerprint: models.SaltedFingerprint(credential, ctx.FingerprintSalt),
 		Severity:    "critical",
-		Title:       fmt.Sprintf("HTTP Authentication Credential Detected (%s)", pattern.description),
-		Message: fmt.Sprintf(
-			"A %s was detected in %s. "+
-				"HTTP authentication credentials in plain text may be exposed in logs, shell history, "+
-				"configuration files, or source code. This could allow unauthorized access to protected resources. "+
-				"Use environment variables, secure credential storage, or secret management systems instead.",
-			pattern.description,
-			ctx.FormatSource(),
-		),
-		Path: ctx.Source,
+		Title:       "HTTP Authentication Credential Detected",
+		Description: "HTTP authentication credentials in plain text may be exposed in logs, shell history, or configuration files. " +
+			"Use secure credential storage or secret management systems instead.",
+		Message: fmt.Sprintf("A %s was detected in %s.", pattern.description, ctx.FormatSource()),
+		Path:    ctx.Source,
 		Metadata: map[string]interface{}{
 			"detector_name": d.Name(),
 			"token_type":    pattern.tokenType,

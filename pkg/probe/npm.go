@@ -5,6 +5,7 @@ package probe
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"strings"
 
@@ -184,9 +185,9 @@ func (p *NPMProbe) checkStrictSSL(filePath string, config map[string]string) []m
 			Probe:       p.Name(),
 			Severity:    "high",
 			Title:       "NPM SSL Verification Disabled",
-			Message: "NPM is configured to skip SSL certificate verification (strict-ssl=false). " +
-				"This makes you vulnerable to man-in-the-middle attacks when installing packages from registries.",
-			Path: filePath,
+			Description: "Disabling SSL certificate verification (strict-ssl=false) makes you vulnerable to man-in-the-middle attacks when installing packages from registries.",
+			Message:     fmt.Sprintf("In %s: strict-ssl=false", filePath),
+			Path:        filePath,
 			Metadata: map[string]interface{}{
 				"config_key":   "strict-ssl",
 				"config_value": value,
@@ -212,9 +213,9 @@ func (p *NPMProbe) checkInsecureRegistry(filePath string, config map[string]stri
 					Probe:       p.Name(),
 					Severity:    "high",
 					Title:       "NPM Insecure Registry Configured",
-					Message: "NPM is configured to use an insecure HTTP registry. " +
-						"This allows packages to be intercepted or modified in transit. Use HTTPS registries only.",
-					Path: filePath,
+					Description: "HTTP registries allow packages to be intercepted or modified in transit. Use HTTPS registries only.",
+					Message:     fmt.Sprintf("In %s: %s=%s", filePath, key, value),
+					Path:        filePath,
 					Metadata: map[string]interface{}{
 						"config_key":   key,
 						"config_value": value,
@@ -240,10 +241,10 @@ func (p *NPMProbe) checkAlwaysAuth(filePath string, config map[string]string) []
 			Probe:       p.Name(),
 			Severity:    "low",
 			Title:       "NPM Always-Auth Enabled",
-			Message: "NPM is configured to always require authentication (always-auth=true). " +
-				"While this can be secure, ensure your authentication tokens are properly protected " +
+			Description: "Always requiring authentication (always-auth=true) requires that authentication tokens are properly protected " +
 				"and not accidentally committed to version control.",
-			Path: filePath,
+			Message: fmt.Sprintf("In %s: always-auth=true", filePath),
+			Path:    filePath,
 			Metadata: map[string]interface{}{
 				"config_key":   "always-auth",
 				"config_value": value,

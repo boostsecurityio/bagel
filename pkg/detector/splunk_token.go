@@ -51,13 +51,10 @@ func (d *SplunkTokenDetector) Detect(
 			Fingerprint: models.SaltedFingerprint(match, ctx.FingerprintSalt),
 			Severity:    "critical",
 			Title:       "Splunk Session Token Detected",
-			Message: fmt.Sprintf(
-				"A Splunk session token was detected in %s. "+
-					"This credential provides authenticated access to Splunk. "+
-					"Revoke the session and rotate credentials.",
-				ctx.FormatSource(),
-			),
-			Path: ctx.Source,
+			Description: "Splunk session tokens provide authenticated access to Splunk. " +
+				"Revoke the session and rotate credentials.",
+			Message: fmt.Sprintf("A Splunk session token was detected in %s.", ctx.FormatSource()),
+			Path:    ctx.Source,
 			Metadata: map[string]interface{}{
 				"detector_name": d.Name(),
 				"token_type":    "splunk-session-token",

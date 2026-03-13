@@ -4,9 +4,11 @@
 package models
 
 import (
+	"encoding/json"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestFingerprint(t *testing.T) {
@@ -87,6 +89,30 @@ func TestFindingTypeConstants(t *testing.T) {
 		t.Parallel()
 		assert.Equal(t, FindingTypeMisconfiguration, FindingType("misconfiguration"))
 	})
+}
+
+func TestFindingDescriptionField(t *testing.T) {
+	t.Parallel()
+
+	finding := Finding{
+		ID:          "test-finding",
+		Type:        FindingTypeSecret,
+		Severity:    "high",
+		Title:       "Test Title",
+		Description: "This is a generic description.",
+		Message:     "Instance-specific message.",
+	}
+
+	data, err := json.Marshal(finding)
+	require.NoError(t, err)
+
+	var decoded map[string]interface{}
+	err = json.Unmarshal(data, &decoded)
+	require.NoError(t, err)
+
+	assert.Equal(t, "This is a generic description.", decoded["description"])
+	assert.Equal(t, "Instance-specific message.", decoded["message"])
+	assert.Equal(t, "Test Title", decoded["title"])
 }
 
 func TestFingerprintFromFields(t *testing.T) {

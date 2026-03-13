@@ -158,22 +158,16 @@ func (d *CloudCredentialsDetector) Redact(content string) (string, map[string]in
 
 // createFinding creates a finding for detected cloud credentials
 func (d *CloudCredentialsDetector) createFinding(credential string, pattern *tokenPattern, ctx *models.DetectionContext) models.Finding {
-	// All cloud credentials are critical severity (we're only detecting actual secrets now)
-	severity := "critical"
-	message := fmt.Sprintf(
-		"A %s was detected in %s. ",
-		pattern.description,
-		ctx.FormatSource(),
-	)
-
 	return models.Finding{
 		ID:          "cloud-credential-" + pattern.tokenType,
 		Type:        models.FindingTypeSecret,
 		Fingerprint: models.SaltedFingerprint(credential, ctx.FingerprintSalt),
-		Severity:    severity,
-		Title:       fmt.Sprintf("Cloud Credential Detected (%s)", pattern.description),
-		Message:     message,
-		Path:        ctx.Source,
+		Severity:    "critical",
+		Title:       "Cloud Credential Detected",
+		Description: "Cloud credentials provide access to infrastructure and services. " +
+			"Exposed credentials risk unauthorized access to cloud resources.",
+		Message: fmt.Sprintf("A %s was detected in %s.", pattern.description, ctx.FormatSource()),
+		Path:    ctx.Source,
 		Metadata: map[string]interface{}{
 			"detector_name": d.Name(),
 			"token_type":    pattern.tokenType,

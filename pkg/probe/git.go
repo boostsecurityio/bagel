@@ -5,6 +5,7 @@ package probe
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -125,7 +126,8 @@ func (p *GitProbe) checkSSLVerify(config map[string]string) []models.Finding {
 			Probe:       p.Name(),
 			Severity:    "high",
 			Title:       "Git SSL Verification Disabled",
-			Message:     "Git is configured to skip SSL certificate verification (http.sslVerify=false). This makes you vulnerable to man-in-the-middle attacks when cloning or pulling from HTTPS repositories.",
+			Description: "Disabling SSL certificate verification (http.sslVerify=false) makes you vulnerable to man-in-the-middle attacks when cloning or pulling from HTTPS repositories.",
+			Message:     "Git global config: http.sslverify=false",
 			Path:        "git-config:http.sslverify",
 			Metadata: map[string]interface{}{
 				"config_key":   "http.sslverify",
@@ -152,7 +154,8 @@ func (p *GitProbe) checkSSHConfig(config map[string]string) []models.Finding {
 				Probe:       p.Name(),
 				Severity:    "high",
 				Title:       "Git SSH Host Key Checking Disabled",
-				Message:     "Git is configured to skip SSH host key verification. This makes you vulnerable to man-in-the-middle attacks when connecting to Git repositories over SSH.",
+				Description: "Disabling SSH host key verification makes you vulnerable to man-in-the-middle attacks when connecting to Git repositories over SSH.",
+				Message:     "Git global config: core.sshcommand contains StrictHostKeyChecking=no",
 				Path:        "git-config:core.sshcommand",
 				Metadata: map[string]interface{}{
 					"config_key":   "core.sshcommand",
@@ -179,7 +182,8 @@ func (p *GitProbe) checkSSHConfig(config map[string]string) []models.Finding {
 				Probe:       p.Name(),
 				Severity:    "high",
 				Title:       "Git SSH Known Hosts Disabled",
-				Message:     "Git is configured to ignore the SSH known_hosts file, preventing host key verification.",
+				Description: "Ignoring the SSH known_hosts file prevents host key verification, enabling potential MITM attacks.",
+				Message:     "Git global config: core.sshcommand redirects UserKnownHostsFile to null device",
 				Path:        "git-config:core.sshcommand",
 				Metadata: map[string]interface{}{
 					"config_key":   "core.sshcommand",
@@ -213,7 +217,8 @@ func (p *GitProbe) checkCredentialStorage(config map[string]string) []models.Fin
 				Probe:       p.Name(),
 				Severity:    "high",
 				Title:       "Git Credentials Stored in Plaintext",
-				Message:     "Git is configured to store credentials in plaintext on disk (" + credPath + "). These credentials can be easily accessed by any process or user with filesystem access.",
+				Description: "Plaintext credential storage allows any process or user with filesystem access to read your credentials.",
+				Message:     fmt.Sprintf("Git global config: credential.helper=store (credentials at %s)", credPath),
 				Path:        "git-config:credential.helper",
 				Metadata: map[string]interface{}{
 					"config_key":   "credential.helper",
@@ -246,7 +251,8 @@ func (p *GitProbe) checkProtocolSettings(config map[string]string) []models.Find
 							Probe:       p.Name(),
 							Severity:    "medium",
 							Title:       "Git Dangerous Protocol Enabled",
-							Message:     "Git is configured to always allow the '" + protocol + "' protocol, which can be used to execute arbitrary commands or access local files.",
+							Description: "Dangerous Git protocols (ext, fd, file) can execute arbitrary commands or access local files when always allowed.",
+							Message:     fmt.Sprintf("Git global config: %s=%s (protocol: %s)", key, value, protocol),
 							Path:        "git-config:" + key,
 							Metadata: map[string]interface{}{
 								"config_key":   key,
@@ -278,7 +284,8 @@ func (p *GitProbe) checkFsckSettings(config map[string]string) []models.Finding 
 				Probe:       p.Name(),
 				Severity:    "medium",
 				Title:       "Git Object Verification Disabled",
-				Message:     "Git is configured to skip object verification (" + key + "=false). This could allow corrupted or malicious objects to be accepted.",
+				Description: "Disabling object verification allows corrupted or malicious objects to be accepted during fetch/receive/transfer.",
+				Message:     fmt.Sprintf("Git global config: %s=false", key),
 				Path:        "git-config:" + key,
 				Metadata: map[string]interface{}{
 					"config_key":   key,
@@ -306,7 +313,8 @@ func (p *GitProbe) checkProxySettings(config map[string]string) []models.Finding
 				Probe:       p.Name(),
 				Severity:    "low",
 				Title:       "Git Proxy Configured",
-				Message:     "Git is configured to use a proxy (" + key + "). Ensure this proxy is trusted, as it can intercept all Git traffic.",
+				Description: "Git proxies can intercept all Git traffic. Ensure configured proxies are trusted.",
+				Message:     fmt.Sprintf("Git global config: %s=%s", key, value),
 				Path:        "git-config:" + key,
 				Metadata: map[string]interface{}{
 					"config_key":   key,
@@ -331,7 +339,8 @@ func (p *GitProbe) checkHooksPath(config map[string]string) []models.Finding {
 			Probe:       p.Name(),
 			Severity:    "medium",
 			Title:       "Custom Git Hooks Path Configured",
-			Message:     "Git is configured to use a custom hooks directory. This could be used to execute malicious code during Git operations.",
+			Description: "Custom hooks directories can execute arbitrary code during Git operations.",
+			Message:     "Git global config: core.hookspath=" + value,
 			Path:        "git-config:core.hookspath",
 			Metadata: map[string]interface{}{
 				"config_key":   "core.hookspath",

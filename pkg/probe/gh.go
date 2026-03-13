@@ -76,11 +76,10 @@ func (p *GHProbe) Execute(ctx context.Context) ([]models.Finding, error) {
 		Probe:       p.Name(),
 		Severity:    "medium",
 		Title:       "GitHub CLI Authentication Detected",
-		Message: "The GitHub CLI (gh) has an active authenticated session on this machine. " +
-			"If this machine is compromised, an attacker could use the gh CLI to access your GitHub account, " +
-			"repositories, and organization resources without needing to know your credentials. " +
-			"Consider using 'gh auth logout' when not actively using the CLI, or ensure this machine has appropriate security controls.",
-		Path: ghPath,
+		Description: "An active GitHub CLI session allows attackers to access your GitHub account, repositories, and organization resources if this machine is compromised. " +
+			"Consider using 'gh auth logout' when not actively using the CLI.",
+		Message: "GitHub CLI authenticated at " + ghPath,
+		Path:    ghPath,
 		Metadata: map[string]interface{}{
 			"gh_path": ghPath,
 		},
