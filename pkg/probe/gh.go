@@ -71,6 +71,7 @@ func (p *GHProbe) Execute(ctx context.Context) ([]models.Finding, error) {
 	// If we get here, gh auth token succeeded - there's an active session
 	findings = append(findings, models.Finding{
 		ID:          "gh-auth-token-present",
+		Type:        models.FindingTypeSecret,
 		Fingerprint: models.FingerprintFromFields("gh-auth-token-present", ghPath),
 		Probe:       p.Name(),
 		Severity:    "medium",

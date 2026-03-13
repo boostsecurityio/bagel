@@ -120,6 +120,7 @@ func (d *HTTPAuthDetector) Redact(content string) (string, map[string]int) {
 func (d *HTTPAuthDetector) createFinding(credential string, pattern *tokenPattern, ctx *models.DetectionContext) models.Finding {
 	return models.Finding{
 		ID:          "http-auth-" + pattern.tokenType,
+		Type:        models.FindingTypeSecret,
 		Fingerprint: models.SaltedFingerprint(credential, ctx.FingerprintSalt),
 		Severity:    "critical",
 		Title:       fmt.Sprintf("HTTP Authentication Credential Detected (%s)", pattern.description),

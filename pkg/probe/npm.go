@@ -179,6 +179,7 @@ func (p *NPMProbe) checkStrictSSL(filePath string, config map[string]string) []m
 	if value, ok := config["strict-ssl"]; ok && strings.ToLower(value) == "false" {
 		findings = append(findings, models.Finding{
 			ID:          "npm-ssl-verify-disabled",
+			Type:        models.FindingTypeMisconfiguration,
 			Fingerprint: models.FingerprintFromFields("npm-ssl-verify-disabled", filePath),
 			Probe:       p.Name(),
 			Severity:    "high",
@@ -206,6 +207,7 @@ func (p *NPMProbe) checkInsecureRegistry(filePath string, config map[string]stri
 			if strings.HasPrefix(value, "http://") {
 				findings = append(findings, models.Finding{
 					ID:          "npm-insecure-registry",
+					Type:        models.FindingTypeMisconfiguration,
 					Fingerprint: models.FingerprintFromFields("npm-insecure-registry", filePath, key),
 					Probe:       p.Name(),
 					Severity:    "high",
@@ -233,6 +235,7 @@ func (p *NPMProbe) checkAlwaysAuth(filePath string, config map[string]string) []
 		// This is informational - always-auth can be legitimate but worth noting
 		findings = append(findings, models.Finding{
 			ID:          "npm-always-auth-enabled",
+			Type:        models.FindingTypeMisconfiguration,
 			Fingerprint: models.FingerprintFromFields("npm-always-auth-enabled", filePath),
 			Probe:       p.Name(),
 			Severity:    "low",

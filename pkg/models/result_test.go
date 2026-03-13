@@ -75,6 +75,20 @@ func TestHostInfoFingerprintSalt(t *testing.T) {
 	})
 }
 
+func TestFindingTypeConstants(t *testing.T) {
+	t.Parallel()
+
+	t.Run("secret type has expected value", func(t *testing.T) {
+		t.Parallel()
+		assert.Equal(t, FindingTypeSecret, FindingType("secret"))
+	})
+
+	t.Run("misconfiguration type has expected value", func(t *testing.T) {
+		t.Parallel()
+		assert.Equal(t, FindingTypeMisconfiguration, FindingType("misconfiguration"))
+	})
+}
+
 func TestFingerprintFromFields(t *testing.T) {
 	t.Parallel()
 

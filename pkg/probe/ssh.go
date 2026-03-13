@@ -187,6 +187,7 @@ func (p *SSHProbe) checkSSHConfigContent(filePath string, content string) []mode
 			if !reportedIssues[issueKey] {
 				findings = append(findings, models.Finding{
 					ID:          "ssh-strict-host-key-checking-disabled",
+					Type:        models.FindingTypeMisconfiguration,
 					Fingerprint: models.FingerprintFromFields("ssh-strict-host-key-checking-disabled", filePath, currentHost),
 					Probe:       p.Name(),
 					Severity:    "high",
@@ -217,6 +218,7 @@ func (p *SSHProbe) checkSSHConfigContent(filePath string, content string) []mode
 			if !reportedIssues[issueKey] {
 				findings = append(findings, models.Finding{
 					ID:          "ssh-known-hosts-disabled",
+					Type:        models.FindingTypeMisconfiguration,
 					Fingerprint: models.FingerprintFromFields("ssh-known-hosts-disabled", filePath, currentHost),
 					Probe:       p.Name(),
 					Severity:    "high",
@@ -267,6 +269,7 @@ func (p *SSHProbe) checkSSHConfigContent(filePath string, content string) []mode
 
 				findings = append(findings, models.Finding{
 					ID:          "ssh-forward-agent-enabled",
+					Type:        models.FindingTypeMisconfiguration,
 					Fingerprint: models.FingerprintFromFields("ssh-forward-agent-enabled", filePath, currentHost),
 					Probe:       p.Name(),
 					Severity:    severity,
@@ -314,6 +317,7 @@ func (p *SSHProbe) checkKeyPermissions(ctx context.Context, keyPath string) []mo
 	if mode&0077 != 0 { // Check if group or other have any permissions
 		findings = append(findings, models.Finding{
 			ID:          "ssh-key-insecure-permissions",
+			Type:        models.FindingTypeMisconfiguration,
 			Fingerprint: models.FingerprintFromFields("ssh-key-insecure-permissions", keyPath),
 			Probe:       p.Name(),
 			Severity:    "high",

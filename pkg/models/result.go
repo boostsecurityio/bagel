@@ -146,9 +146,18 @@ func FingerprintFromFields(fields ...string) string {
 	return Fingerprint(string(data))
 }
 
+// FindingType classifies the category of a security finding.
+type FindingType string
+
+const (
+	FindingTypeSecret           FindingType = "secret"
+	FindingTypeMisconfiguration FindingType = "misconfiguration"
+)
+
 // Finding represents a single security finding
 type Finding struct {
 	ID          string                 `json:"id"`
+	Type        FindingType            `json:"type"`
 	Fingerprint string                 `json:"fingerprint"`
 	Probe       string                 `json:"probe"`
 	Severity    string                 `json:"severity"`

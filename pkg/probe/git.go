@@ -120,6 +120,7 @@ func (p *GitProbe) checkSSLVerify(config map[string]string) []models.Finding {
 	if value, ok := config["http.sslverify"]; ok && strings.ToLower(value) == "false" {
 		findings = append(findings, models.Finding{
 			ID:          "git-ssl-verify-disabled",
+			Type:        models.FindingTypeMisconfiguration,
 			Fingerprint: models.FingerprintFromFields("git-ssl-verify-disabled", "git-config:http.sslverify"),
 			Probe:       p.Name(),
 			Severity:    "high",
@@ -146,6 +147,7 @@ func (p *GitProbe) checkSSHConfig(config map[string]string) []models.Finding {
 			strings.Contains(strings.ToLower(value), "stricthostkeychecking no") {
 			findings = append(findings, models.Finding{
 				ID:          "git-ssh-no-host-key-check",
+				Type:        models.FindingTypeMisconfiguration,
 				Fingerprint: models.FingerprintFromFields("git-ssh-no-host-key-check", "git-config:core.sshcommand"),
 				Probe:       p.Name(),
 				Severity:    "high",
@@ -172,6 +174,7 @@ func (p *GitProbe) checkSSHConfig(config map[string]string) []models.Finding {
 		if knownHostsPath != "" && IsNullDevice(knownHostsPath) {
 			findings = append(findings, models.Finding{
 				ID:          "git-ssh-no-known-hosts",
+				Type:        models.FindingTypeMisconfiguration,
 				Fingerprint: models.FingerprintFromFields("git-ssh-no-known-hosts", "git-config:core.sshcommand"),
 				Probe:       p.Name(),
 				Severity:    "high",
@@ -205,6 +208,7 @@ func (p *GitProbe) checkCredentialStorage(config map[string]string) []models.Fin
 			}
 			findings = append(findings, models.Finding{
 				ID:          "git-credential-plaintext",
+				Type:        models.FindingTypeMisconfiguration,
 				Fingerprint: models.FingerprintFromFields("git-credential-plaintext", "git-config:credential.helper"),
 				Probe:       p.Name(),
 				Severity:    "high",
@@ -237,6 +241,7 @@ func (p *GitProbe) checkProtocolSettings(config map[string]string) []models.Find
 					if strings.ToLower(protocol) == dangerous {
 						findings = append(findings, models.Finding{
 							ID:          "git-dangerous-protocol",
+							Type:        models.FindingTypeMisconfiguration,
 							Fingerprint: models.FingerprintFromFields("git-dangerous-protocol", "git-config:"+key),
 							Probe:       p.Name(),
 							Severity:    "medium",
@@ -268,6 +273,7 @@ func (p *GitProbe) checkFsckSettings(config map[string]string) []models.Finding 
 		if value, ok := config[key]; ok && strings.ToLower(value) == "false" {
 			findings = append(findings, models.Finding{
 				ID:          "git-fsck-disabled",
+				Type:        models.FindingTypeMisconfiguration,
 				Fingerprint: models.FingerprintFromFields("git-fsck-disabled", "git-config:"+key),
 				Probe:       p.Name(),
 				Severity:    "medium",
@@ -295,6 +301,7 @@ func (p *GitProbe) checkProxySettings(config map[string]string) []models.Finding
 		if value, ok := config[key]; ok && value != "" {
 			findings = append(findings, models.Finding{
 				ID:          "git-proxy-configured",
+				Type:        models.FindingTypeMisconfiguration,
 				Fingerprint: models.FingerprintFromFields("git-proxy-configured", "git-config:"+key),
 				Probe:       p.Name(),
 				Severity:    "low",
@@ -319,6 +326,7 @@ func (p *GitProbe) checkHooksPath(config map[string]string) []models.Finding {
 	if value, ok := config["core.hookspath"]; ok && value != "" {
 		findings = append(findings, models.Finding{
 			ID:          "git-custom-hooks-path",
+			Type:        models.FindingTypeMisconfiguration,
 			Fingerprint: models.FingerprintFromFields("git-custom-hooks-path", "git-config:core.hookspath"),
 			Probe:       p.Name(),
 			Severity:    "medium",

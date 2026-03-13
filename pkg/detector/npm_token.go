@@ -78,6 +78,7 @@ func (d *NPMTokenDetector) Redact(content string) (string, map[string]int) {
 func (d *NPMTokenDetector) createFinding(token string, pattern *tokenPattern, ctx *models.DetectionContext) models.Finding {
 	return models.Finding{
 		ID:          "npm-token-" + pattern.tokenType,
+		Type:        models.FindingTypeSecret,
 		Fingerprint: models.SaltedFingerprint(token, ctx.FingerprintSalt),
 		Severity:    "critical",
 		Title:       fmt.Sprintf("NPM Token Detected (%s)", pattern.description),
