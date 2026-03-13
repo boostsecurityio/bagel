@@ -46,7 +46,7 @@ JWEs have five parts:
 ```json
 {
   "id": "jwt-jwt-token",
-  "fingerprint": "sha256:...",
+  "fingerprint": "0123abcd...",
   "probe": "shell_history",
   "severity": "critical",
   "title": "JWT Token Detected (JWT Token)",

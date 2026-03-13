@@ -62,7 +62,7 @@ Refresh tokens used to obtain new access tokens.
 ```json
 {
   "id": "github-token-classic-pat",
-  "fingerprint": "sha256:...",
+  "fingerprint": "0123456789abcdef...",
   "probe": "env",
   "severity": "critical",
   "title": "GitHub Token Detected (Classic Personal Access Token)",

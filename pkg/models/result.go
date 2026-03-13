@@ -7,6 +7,7 @@ import (
 	"crypto/hmac"
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
 	"fmt"
 	"strings"
 	"time"
@@ -132,11 +133,17 @@ func SaltedFingerprint(value, salt string) string {
 	return hex.EncodeToString(mac.Sum(nil))
 }
 
-// FingerprintFromFields computes a fingerprint from multiple identifying fields joined by ":".
+// FingerprintFromFields computes a fingerprint from multiple identifying fields.
 // Use this for config-based findings where the fingerprint is derived from stable attributes
 // like finding ID, path, and other discriminating fields.
 func FingerprintFromFields(fields ...string) string {
-	return Fingerprint(strings.Join(fields, ":"))
+	// Use an unambiguous encoding (JSON) to avoid collisions when fields contain ":" or other separators.
+	data, err := json.Marshal(fields)
+	if err != nil {
+		// Fallback to the previous behavior if JSON encoding unexpectedly fails.
+		return Fingerprint(strings.Join(fields, ":"))
+	}
+	return Fingerprint(string(data))
 }
 
 // Finding represents a single security finding

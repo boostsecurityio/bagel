@@ -29,7 +29,7 @@ NPM automation tokens follow a consistent format:
 ```json
 {
   "id": "npm-token-npm-auth-token",
-  "fingerprint": "sha256:...",
+  "fingerprint": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
   "probe": "npm",
   "severity": "critical",
   "title": "NPM Token Detected (NPM Authentication Token)",

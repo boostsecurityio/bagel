@@ -70,7 +70,7 @@ The detector filters out common false positives:
 ```json
 {
   "id": "generic-api-key",
-  "fingerprint": "sha256:...",
+  "fingerprint": "abcdef123456...",
   "probe": "env",
   "severity": "high",
   "title": "Generic API Key Detected",

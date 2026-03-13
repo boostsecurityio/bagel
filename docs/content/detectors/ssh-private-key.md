@@ -58,7 +58,7 @@ If `bm9uZQ` (none) is found, the key is unencrypted.
 ```json
 {
   "id": "ssh-private-key-rsa",
-  "fingerprint": "sha256:...",
+  "fingerprint": "0123abcd...",
   "probe": "ssh",
   "severity": "critical",
   "title": "Unencrypted SSH Private Key Detected (RSA)",
