@@ -569,6 +569,53 @@ func TestBuildIndex_Concurrent_ContextCancellation(t *testing.T) {
 	}
 }
 
+func TestBuildIndex_ParallelTraversal(t *testing.T) {
+	t.Parallel()
+
+	// Create a wide directory tree to exercise parallel goroutine-per-subdirectory traversal.
+	// Each of the 20 top-level dirs contains 5 subdirs, each with a target file.
+	tmpDir := t.TempDir()
+
+	expectedFiles := make(map[string]struct{})
+	for i := 0; i < 20; i++ {
+		for j := 0; j < 5; j++ {
+			dirPath := filepath.Join(tmpDir, fmt.Sprintf("top%02d", i), fmt.Sprintf("sub%02d", j))
+			require.NoError(t, os.MkdirAll(dirPath, 0755))
+			filePath := filepath.Join(dirPath, ".env")
+			require.NoError(t, os.WriteFile(filePath, []byte("content"), 0644))
+			expectedFiles[filePath] = struct{}{}
+		}
+	}
+
+	patterns := []Pattern{
+		{
+			Name:     "env_files",
+			Patterns: []string{".env"},
+			Type:     PatternTypeExact,
+		},
+	}
+
+	input := BuildIndexInput{
+		BaseDirs:       []string{tmpDir},
+		Patterns:       patterns,
+		MaxDepth:       0,
+		FollowSymlinks: false,
+	}
+
+	ctx := context.Background()
+	index, err := BuildIndex(ctx, input)
+	require.NoError(t, err)
+
+	envFiles := index.Get("env_files")
+	assert.Len(t, envFiles, 100)
+
+	// Verify every expected file was found
+	for _, f := range envFiles {
+		_, ok := expectedFiles[f]
+		assert.True(t, ok, "unexpected file in results: %s", f)
+	}
+}
+
 func TestBuildIndex_Concurrent_MultipleBaseDirs(t *testing.T) {
 	t.Parallel()
 
