@@ -5,6 +5,7 @@ package fileindex
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -153,12 +154,16 @@ func BuildIndex(ctx context.Context, input BuildIndexInput) (*FileIndex, error) 
 		discoveryWg.Add(1)
 		go func(dir string) {
 			defer discoveryWg.Done()
-			runDiscovery(ctx, dir, input, input.Patterns, index, &filesProcessed)
+			runDiscovery(ctx, dir, input, index, &filesProcessed)
 		}(baseDir)
 	}
 
 	discoveryWg.Wait()
 	close(progressDone)
+
+	if err := ctx.Err(); err != nil {
+		return index, fmt.Errorf("build file index: %w", err)
+	}
 
 	totalFiles := index.TotalFiles()
 	log.Ctx(ctx).Info().
@@ -174,7 +179,6 @@ func runDiscovery(
 	ctx context.Context,
 	baseDir string,
 	input BuildIndexInput,
-	patterns []Pattern,
 	index *FileIndex,
 	filesProcessed *atomic.Int64,
 ) {
@@ -199,7 +203,7 @@ func runDiscovery(
 	sem := make(chan struct{}, 3*runtime.GOMAXPROCS(0))
 	var wg sync.WaitGroup
 
-	walkDirectory(ctx, baseDir, baseDir, input, patterns, index, filesProcessed, 0, sem, &wg)
+	walkDirectory(ctx, baseDir, baseDir, input, input.Patterns, index, filesProcessed, 0, sem, &wg)
 
 	// Wait for all spawned goroutines to finish before returning
 	wg.Wait()

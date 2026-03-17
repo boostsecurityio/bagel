@@ -562,11 +562,10 @@ func TestBuildIndex_Concurrent_ContextCancellation(t *testing.T) {
 	// Due to concurrent nature, it may complete before cancellation is processed
 	// What matters is that it doesn't hang and respects cancellation
 	if buildErr != nil {
-		assert.ErrorIs(t, buildErr, context.Canceled)
-	} else {
-		// If no error, it completed before cancellation was processed
-		assert.NotNil(t, index)
+		require.ErrorIs(t, buildErr, context.Canceled)
 	}
+	// Index is always returned (possibly partial)
+	assert.NotNil(t, index)
 }
 
 func TestBuildIndex_ParallelTraversal(t *testing.T) {
