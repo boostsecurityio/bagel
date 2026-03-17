@@ -268,11 +268,15 @@ func walkDirectory(
 			}
 
 			if resolvedInfo.IsDir() {
-				// Spawn goroutine for symlinked directory traversal
+				// Acquire semaphore before spawning to bound goroutine count
+				select {
+				case sem <- struct{}{}:
+				case <-ctx.Done():
+					return
+				}
 				wg.Add(1)
 				go func(path string) {
 					defer wg.Done()
-					sem <- struct{}{}
 					defer func() { <-sem }()
 					walkDirectory(ctx, baseDir, path, input, patterns, index, filesProcessed, depth+1, sem, wg)
 				}(resolvedPath)
@@ -284,12 +288,16 @@ func walkDirectory(
 			continue
 		}
 
-		// Handle directories - spawn goroutine gated by semaphore
+		// Handle directories - acquire semaphore before spawning to bound goroutine count
 		if entry.IsDir() {
+			select {
+			case sem <- struct{}{}:
+			case <-ctx.Done():
+				return
+			}
 			wg.Add(1)
 			go func(path string) {
 				defer wg.Done()
-				sem <- struct{}{}
 				defer func() { <-sem }()
 				walkDirectory(ctx, baseDir, path, input, patterns, index, filesProcessed, depth+1, sem, wg)
 			}(fullPath)
