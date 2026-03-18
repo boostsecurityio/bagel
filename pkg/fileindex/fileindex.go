@@ -247,6 +247,13 @@ func walkDirectory(
 	}
 
 	for _, entry := range entries {
+		// Check cancellation each iteration for responsive shutdown
+		select {
+		case <-ctx.Done():
+			return
+		default:
+		}
+
 		fullPath := filepath.Join(currentDir, entry.Name())
 
 		// Handle symbolic links
@@ -272,18 +279,20 @@ func walkDirectory(
 			}
 
 			if resolvedInfo.IsDir() {
-				// Acquire semaphore before spawning to bound goroutine count
 				select {
 				case sem <- struct{}{}:
+					wg.Add(1)
+					go func(path string) {
+						defer wg.Done()
+						defer func() { <-sem }()
+						walkDirectory(ctx, baseDir, path, input, patterns, index, filesProcessed, depth+1, sem, wg)
+					}(resolvedPath)
 				case <-ctx.Done():
 					return
+				default:
+					// Semaphore full - recurse inline to avoid deadlock
+					walkDirectory(ctx, baseDir, resolvedPath, input, patterns, index, filesProcessed, depth+1, sem, wg)
 				}
-				wg.Add(1)
-				go func(path string) {
-					defer wg.Done()
-					defer func() { <-sem }()
-					walkDirectory(ctx, baseDir, path, input, patterns, index, filesProcessed, depth+1, sem, wg)
-				}(resolvedPath)
 			} else {
 				// Match symlinked file inline
 				matchFile(ctx, baseDir, resolvedPath, patterns, index)
@@ -292,19 +301,22 @@ func walkDirectory(
 			continue
 		}
 
-		// Handle directories - acquire semaphore before spawning to bound goroutine count
+		// Handle directories
 		if entry.IsDir() {
 			select {
 			case sem <- struct{}{}:
+				wg.Add(1)
+				go func(path string) {
+					defer wg.Done()
+					defer func() { <-sem }()
+					walkDirectory(ctx, baseDir, path, input, patterns, index, filesProcessed, depth+1, sem, wg)
+				}(fullPath)
 			case <-ctx.Done():
 				return
+			default:
+				// Semaphore full - recurse inline to avoid deadlock
+				walkDirectory(ctx, baseDir, fullPath, input, patterns, index, filesProcessed, depth+1, sem, wg)
 			}
-			wg.Add(1)
-			go func(path string) {
-				defer wg.Done()
-				defer func() { <-sem }()
-				walkDirectory(ctx, baseDir, path, input, patterns, index, filesProcessed, depth+1, sem, wg)
-			}(fullPath)
 			continue
 		}
 
