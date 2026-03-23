@@ -100,7 +100,6 @@ type Pattern struct {
 // BuildIndexInput holds the input parameters for building a file index
 type BuildIndexInput struct {
 	BaseDirs         []string              // Base directories to search (e.g., ["$HOME"])
-	ExcludePaths     []string              // Paths to skip entirely (e.g., ["~/repos", "~/.cache"])
 	Patterns         []Pattern             // Patterns to match
 	MaxDepth         int                   // Maximum recursion depth (0 = unlimited)
 	FollowSymlinks   bool                  // Whether to follow symbolic links
@@ -117,18 +116,6 @@ func BuildIndex(ctx context.Context, input BuildIndexInput) (*FileIndex, error) 
 		expanded := expandHomeDir(dir)
 		expandedDirs = append(expandedDirs, expanded)
 	}
-
-	// Expand and normalize exclude paths so that inputs like "~/repos/" or
-	// Windows forward-slash paths match correctly inside isExcludedPath.
-	expandedExcludes := make([]string, 0, len(input.ExcludePaths))
-	for _, p := range input.ExcludePaths {
-		expanded := expandHomeDir(p)
-		if expanded != "" {
-			expanded = filepath.Clean(filepath.FromSlash(expanded))
-		}
-		expandedExcludes = append(expandedExcludes, expanded)
-	}
-	input.ExcludePaths = expandedExcludes
 
 	log.Ctx(ctx).Info().
 		Strs("base_dirs", expandedDirs).
@@ -241,14 +228,6 @@ func walkDirectory(
 		return
 	}
 
-	// Check if current directory is excluded
-	if isExcludedPath(currentDir, input.ExcludePaths) {
-		log.Ctx(ctx).Debug().
-			Str("dir", currentDir).
-			Msg("Skipping excluded directory")
-		return
-	}
-
 	// Check if context is cancelled
 	select {
 	case <-ctx.Done():
@@ -345,24 +324,6 @@ func walkDirectory(
 		matchFile(ctx, baseDir, fullPath, patterns, index)
 		filesProcessed.Add(1)
 	}
-}
-
-// isExcludedPath reports whether path should be skipped during file index building.
-// A path is excluded if it equals any entry in excludePaths, or is a child of one.
-// excludePaths must already be expanded and normalized (no ~ or $HOME variables).
-func isExcludedPath(path string, excludePaths []string) bool {
-	cleanedPath := filepath.Clean(path)
-	for _, excluded := range excludePaths {
-		trimmed := strings.TrimSpace(excluded)
-		if trimmed == "" {
-			continue
-		}
-		cleanedExcluded := filepath.Clean(trimmed)
-		if cleanedPath == cleanedExcluded || strings.HasPrefix(cleanedPath, cleanedExcluded+string(os.PathSeparator)) {
-			return true
-		}
-	}
-	return false
 }
 
 // expandHomeDir expands $HOME, %USERPROFILE%, and ~ to the user's home directory.

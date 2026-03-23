@@ -55,7 +55,6 @@ type FileIndexConfig struct {
 	MaxDepth       int             `yaml:"max_depth" mapstructure:"max_depth"`
 	FollowSymlinks bool            `yaml:"follow_symlinks" mapstructure:"follow_symlinks"`
 	BaseDirs       []string        `yaml:"base_dirs" mapstructure:"base_dirs"`
-	ExcludePaths   []string        `yaml:"exclude_paths" mapstructure:"exclude_paths"`
 	Patterns       []PatternConfig `yaml:"patterns" mapstructure:"patterns"`
 	Cache          CacheConfig     `yaml:"cache" mapstructure:"cache"`
 }
