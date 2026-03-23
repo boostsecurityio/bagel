@@ -5,7 +5,6 @@ package probe
 
 import (
 	"context"
-	"fmt"
 	"os"
 
 	"github.com/boostsecurityio/bagel/pkg/detector"
@@ -105,7 +104,10 @@ func (p *AICliProbe) Execute(ctx context.Context) ([]models.Finding, error) {
 		for _, filePath := range files {
 			select {
 			case <-ctx.Done():
-				return findings, fmt.Errorf("ai_cli probe: %w", ctx.Err())
+				log.Ctx(ctx).Debug().
+					Str("probe", p.Name()).
+					Msg("Context cancelled, returning partial findings")
+				return findings, nil
 			default:
 			}
 			fileFindings := p.processFile(ctx, filePath)
@@ -136,7 +138,7 @@ func (p *AICliProbe) processFile(ctx context.Context, filePath string) []models.
 			Str("file", filePath).
 			Int64("size_bytes", info.Size()).
 			Int64("max_size_bytes", maxChatFileSize).
-			Msg("Skipping oversized AI CLI chat file")
+			Msg("Skipping oversized AI CLI file")
 		return findings
 	}
 
