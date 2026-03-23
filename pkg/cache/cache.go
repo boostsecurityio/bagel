@@ -33,7 +33,7 @@ const (
 type Metadata struct {
 	SchemaVersion  int       `json:"schema_version"`
 	CreatedAt      time.Time `json:"created_at"`
-	BaseDirs       []string  `json:"base_dirs"`    // Stored as expanded paths
+	BaseDirs       []string  `json:"base_dirs"`     // Stored as expanded paths
 	ExcludePaths   []string  `json:"exclude_paths"` // Stored as expanded paths
 	PatternsHash   string    `json:"patterns_hash"`
 	MaxDepth       int       `json:"max_depth"`
