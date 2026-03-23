@@ -13,10 +13,8 @@ import (
 	"github.com/rs/zerolog/log"
 )
 
-// maxChatFileSize is the maximum size of an AI chat log file that will be scanned.
-// Files larger than this limit are skipped to prevent unbounded memory usage and
-// scan hangs when users accumulate large conversation histories.
-const maxChatFileSize = 1 * 1024 * 1024 // 1MB
+// defaultMaxFileSize is the fallback file size limit when none is set in config.
+const defaultMaxFileSize = 1 * 1024 * 1024 // 1MB
 
 // AICliProbe checks AI CLI credential and chat files
 type AICliProbe struct {
@@ -24,14 +22,29 @@ type AICliProbe struct {
 	config           models.ProbeSettings
 	detectorRegistry *detector.Registry
 	fileIndex        *fileindex.FileIndex
+	maxFileSize      int64
 }
 
-// NewAICliProbe creates a new AI CLI credentials probe
+// NewAICliProbe creates a new AI CLI credentials probe.
+// Accepts an optional flag "max_file_size" (int, in bytes) to override the
+// default 1 MB file size limit for AI CLI files.
 func NewAICliProbe(config models.ProbeSettings, registry *detector.Registry) *AICliProbe {
+	maxFileSize := int64(defaultMaxFileSize)
+	if v, ok := config.Flags["max_file_size"]; ok {
+		switch val := v.(type) {
+		case int:
+			maxFileSize = int64(val)
+		case int64:
+			maxFileSize = val
+		case float64:
+			maxFileSize = int64(val)
+		}
+	}
 	return &AICliProbe{
 		enabled:          config.Enabled,
 		config:           config,
 		detectorRegistry: registry,
+		maxFileSize:      maxFileSize,
 	}
 }
 
@@ -133,11 +146,11 @@ func (p *AICliProbe) processFile(ctx context.Context, filePath string) []models.
 			Msg("Cannot stat AI CLI file")
 		return findings
 	}
-	if info.Size() > maxChatFileSize {
+	if info.Size() > p.maxFileSize {
 		log.Ctx(ctx).Debug().
 			Str("file", filePath).
 			Int64("size_bytes", info.Size()).
-			Int64("max_size_bytes", maxChatFileSize).
+			Int64("max_size_bytes", p.maxFileSize).
 			Msg("Skipping oversized AI CLI file")
 		return findings
 	}
