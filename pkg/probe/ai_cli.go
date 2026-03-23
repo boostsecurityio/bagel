@@ -5,6 +5,7 @@ package probe
 
 import (
 	"context"
+	"fmt"
 	"os"
 
 	"github.com/boostsecurityio/bagel/pkg/detector"
@@ -104,7 +105,7 @@ func (p *AICliProbe) Execute(ctx context.Context) ([]models.Finding, error) {
 		for _, filePath := range files {
 			select {
 			case <-ctx.Done():
-				return findings, ctx.Err()
+				return findings, fmt.Errorf("ai_cli probe: %w", ctx.Err())
 			default:
 			}
 			fileFindings := p.processFile(ctx, filePath)
