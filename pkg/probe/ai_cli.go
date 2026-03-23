@@ -13,6 +13,11 @@ import (
 	"github.com/rs/zerolog/log"
 )
 
+// maxChatFileSize is the maximum size of an AI chat log file that will be scanned.
+// Files larger than this limit are skipped to prevent unbounded memory usage and
+// scan hangs when users accumulate large conversation histories.
+const maxChatFileSize = 1 * 1024 * 1024 // 1MB
+
 // AICliProbe checks ALI CLI credential and chat files
 type AICliProbe struct {
 	enabled          bool
@@ -85,40 +90,26 @@ func (p *AICliProbe) Execute(ctx context.Context) ([]models.Finding, error) {
 		Int("opencode_chats_count", len(opencodeChats)).
 		Msg("Found AI CLI chat log files")
 
-	// Process Gemini files
-	for _, filePath := range geminiCreds {
-		fileFindings := p.processFile(ctx, filePath)
-		findings = append(findings, fileFindings...)
-	}
-	for _, filePath := range geminiChats {
-		fileFindings := p.processFile(ctx, filePath)
-		findings = append(findings, fileFindings...)
-	}
-
-	// Process Codex files
-	for _, filePath := range codexCreds {
-		fileFindings := p.processFile(ctx, filePath)
-		findings = append(findings, fileFindings...)
-	}
-	for _, filePath := range codexChats {
-		fileFindings := p.processFile(ctx, filePath)
-		findings = append(findings, fileFindings...)
+	fileSets := [][]string{
+		geminiCreds,
+		geminiChats,
+		codexCreds,
+		codexChats,
+		claudeChats,
+		opencodeCreds,
+		opencodeChats,
 	}
 
-	// Process Claude files
-	for _, filePath := range claudeChats {
-		fileFindings := p.processFile(ctx, filePath)
-		findings = append(findings, fileFindings...)
-	}
-
-	// Process OpenCode files
-	for _, filePath := range opencodeCreds {
-		fileFindings := p.processFile(ctx, filePath)
-		findings = append(findings, fileFindings...)
-	}
-	for _, filePath := range opencodeChats {
-		fileFindings := p.processFile(ctx, filePath)
-		findings = append(findings, fileFindings...)
+	for _, files := range fileSets {
+		for _, filePath := range files {
+			select {
+			case <-ctx.Done():
+				return findings, nil
+			default:
+			}
+			fileFindings := p.processFile(ctx, filePath)
+			findings = append(findings, fileFindings...)
+		}
 	}
 
 	return findings, nil
@@ -127,6 +118,26 @@ func (p *AICliProbe) Execute(ctx context.Context) ([]models.Finding, error) {
 // processFile reads and analyzes an AI CLI adjacent file
 func (p *AICliProbe) processFile(ctx context.Context, filePath string) []models.Finding {
 	findings := make([]models.Finding, 0, 4)
+
+	// Check file size before reading to avoid loading large chat logs into memory.
+	// Credential files are small; oversized files are almost certainly conversation
+	// history where a full regex scan would be unbounded and slow.
+	info, err := os.Stat(filePath)
+	if err != nil {
+		log.Ctx(ctx).Debug().
+			Err(err).
+			Str("file", filePath).
+			Msg("Cannot stat AI CLI file")
+		return findings
+	}
+	if info.Size() > maxChatFileSize {
+		log.Ctx(ctx).Debug().
+			Str("file", filePath).
+			Int64("size_bytes", info.Size()).
+			Int64("max_size_bytes", maxChatFileSize).
+			Msg("Skipping oversized AI CLI chat file")
+		return findings
+	}
 
 	// Read file
 	content, err := os.ReadFile(filePath)
