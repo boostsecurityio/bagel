@@ -91,6 +91,48 @@ func TestFindingTypeConstants(t *testing.T) {
 	})
 }
 
+func TestFindingTypeTypeName(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name     string
+		ft       FindingType
+		expected FindingTypeName
+	}{
+		{"secret returns Secret", FindingTypeSecret, FindingTypeNameSecret},
+		{"misconfiguration returns Misconfiguration", FindingTypeMisconfiguration, FindingTypeNameMisconfiguration},
+		{"unknown falls back to raw value", FindingType("custom"), FindingTypeName("custom")},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			assert.Equal(t, tt.expected, tt.ft.TypeName())
+		})
+	}
+}
+
+func TestFindingMarshalJSONIncludesTypeName(t *testing.T) {
+	t.Parallel()
+
+	finding := Finding{
+		ID:       "test-finding",
+		Type:     FindingTypeSecret,
+		Severity: "high",
+		Title:    "Test",
+	}
+
+	data, err := json.Marshal(finding)
+	require.NoError(t, err)
+
+	var decoded map[string]interface{}
+	err = json.Unmarshal(data, &decoded)
+	require.NoError(t, err)
+
+	assert.Equal(t, "secret", decoded["type"])
+	assert.Equal(t, "Secret", decoded["type_name"])
+}
+
 func TestFindingDescriptionField(t *testing.T) {
 	t.Parallel()
 

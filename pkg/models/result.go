@@ -154,10 +154,33 @@ const (
 	FindingTypeMisconfiguration FindingType = "misconfiguration"
 )
 
+// FindingTypeName is the human-readable display name for a FindingType.
+type FindingTypeName string
+
+const (
+	FindingTypeNameSecret           FindingTypeName = "Secret"
+	FindingTypeNameMisconfiguration FindingTypeName = "Misconfiguration"
+)
+
+// findingTypeNames maps each FindingType to its display name.
+var findingTypeNames = map[FindingType]FindingTypeName{
+	FindingTypeSecret:           FindingTypeNameSecret,
+	FindingTypeMisconfiguration: FindingTypeNameMisconfiguration,
+}
+
+// TypeName returns the human-readable display name for a FindingType.
+func (t FindingType) TypeName() FindingTypeName {
+	if name, ok := findingTypeNames[t]; ok {
+		return name
+	}
+	return FindingTypeName(t)
+}
+
 // Finding represents a single security finding
 type Finding struct {
 	ID          string                 `json:"id"`
 	Type        FindingType            `json:"type"`
+	TypeName    FindingTypeName        `json:"type_name"`
 	Fingerprint string                 `json:"fingerprint"`
 	Probe       string                 `json:"probe"`
 	Severity    string                 `json:"severity"`
@@ -167,4 +190,20 @@ type Finding struct {
 	Path        string                 `json:"path,omitempty"`
 	Locations   []string               `json:"locations,omitempty"` // Additional locations when deduplicated
 	Metadata    map[string]interface{} `json:"metadata,omitempty"`
+}
+
+// MarshalJSON implements json.Marshaler, auto-populating TypeName from Type.
+func (f Finding) MarshalJSON() ([]byte, error) {
+	type Alias Finding
+	data, err := json.Marshal(&struct {
+		Alias
+		TypeName FindingTypeName `json:"type_name"`
+	}{
+		Alias:    Alias(f),
+		TypeName: f.Type.TypeName(),
+	})
+	if err != nil {
+		return nil, fmt.Errorf("marshal finding: %w", err)
+	}
+	return data, nil
 }
