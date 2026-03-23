@@ -118,10 +118,15 @@ func BuildIndex(ctx context.Context, input BuildIndexInput) (*FileIndex, error) 
 		expandedDirs = append(expandedDirs, expanded)
 	}
 
-	// Expand environment variables in exclude paths
+	// Expand and normalize exclude paths so that inputs like "~/repos/" or
+	// Windows forward-slash paths match correctly inside isExcludedPath.
 	expandedExcludes := make([]string, 0, len(input.ExcludePaths))
 	for _, p := range input.ExcludePaths {
-		expandedExcludes = append(expandedExcludes, expandHomeDir(p))
+		expanded := expandHomeDir(p)
+		if expanded != "" {
+			expanded = filepath.Clean(filepath.FromSlash(expanded))
+		}
+		expandedExcludes = append(expandedExcludes, expanded)
 	}
 	input.ExcludePaths = expandedExcludes
 
@@ -344,10 +349,16 @@ func walkDirectory(
 
 // isExcludedPath reports whether path should be skipped during file index building.
 // A path is excluded if it equals any entry in excludePaths, or is a child of one.
-// excludePaths must already be expanded (no ~ or $HOME variables).
+// excludePaths must already be expanded and normalized (no ~ or $HOME variables).
 func isExcludedPath(path string, excludePaths []string) bool {
+	cleanedPath := filepath.Clean(path)
 	for _, excluded := range excludePaths {
-		if path == excluded || strings.HasPrefix(path, excluded+string(os.PathSeparator)) {
+		trimmed := strings.TrimSpace(excluded)
+		if trimmed == "" {
+			continue
+		}
+		cleanedExcluded := filepath.Clean(trimmed)
+		if cleanedPath == cleanedExcluded || strings.HasPrefix(cleanedPath, cleanedExcluded+string(os.PathSeparator)) {
 			return true
 		}
 	}

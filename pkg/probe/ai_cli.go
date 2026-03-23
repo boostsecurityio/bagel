@@ -18,7 +18,7 @@ import (
 // scan hangs when users accumulate large conversation histories.
 const maxChatFileSize = 1 * 1024 * 1024 // 1MB
 
-// AICliProbe checks ALI CLI credential and chat files
+// AICliProbe checks AI CLI credential and chat files
 type AICliProbe struct {
 	enabled          bool
 	config           models.ProbeSettings
@@ -104,7 +104,7 @@ func (p *AICliProbe) Execute(ctx context.Context) ([]models.Finding, error) {
 		for _, filePath := range files {
 			select {
 			case <-ctx.Done():
-				return findings, nil
+				return findings, ctx.Err()
 			default:
 			}
 			fileFindings := p.processFile(ctx, filePath)
