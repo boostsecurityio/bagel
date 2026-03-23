@@ -192,10 +192,9 @@ func (s *Store) Load(ctx context.Context, input LoadInput) (*fileindex.FileIndex
 		return nil, nil
 	}
 
-	// Validate ExcludePaths match (compare expanded, sorted paths)
-	expandedExcludes := ExpandBaseDirs(input.ExcludePaths)
+	// Validate ExcludePaths match (compare fully normalized, sorted paths)
 	sortedCachedExcludes := sortedCopy(cached.Metadata.ExcludePaths)
-	sortedInputExcludes := sortedCopy(expandedExcludes)
+	sortedInputExcludes := sortedCopy(normalizeExcludePaths(input.ExcludePaths))
 	if !slicesEqual(sortedCachedExcludes, sortedInputExcludes) {
 		logger.Debug().Msg("Cache exclude paths mismatch")
 		return nil, nil
@@ -252,9 +251,9 @@ func (s *Store) Save(ctx context.Context, input SaveInput) error {
 		return fmt.Errorf("create cache directory: %w", err)
 	}
 
-	// Store expanded paths for consistent comparison on load
+	// Store expanded and normalized paths for consistent comparison on load
 	expandedDirs := ExpandBaseDirs(input.BaseDirs)
-	expandedExcludes := ExpandBaseDirs(input.ExcludePaths)
+	expandedExcludes := normalizeExcludePaths(input.ExcludePaths)
 	entries := input.Index.GetAll()
 
 	cached := CachedFileIndex{
@@ -360,10 +359,11 @@ func computeCacheKey(input cacheKeyInput) string {
 		fmt.Fprintf(h, "dir:%s\n", dir)
 	}
 
-	// Expand and sort exclude paths for consistent hashing
-	expandedExcludes := ExpandBaseDirs(input.excludePaths)
-	sort.Strings(expandedExcludes)
-	for _, p := range expandedExcludes {
+	// Normalize and sort exclude paths for consistent hashing; empty/whitespace
+	// entries are dropped so they do not affect the cache key.
+	normalizedExcludes := normalizeExcludePaths(input.excludePaths)
+	sort.Strings(normalizedExcludes)
+	for _, p := range normalizedExcludes {
 		fmt.Fprintf(h, "exclude:%s\n", p)
 	}
 
@@ -431,6 +431,24 @@ func ExpandBaseDirs(baseDirs []string) []string {
 		expanded = append(expanded, expandPath(dir))
 	}
 	return expanded
+}
+
+// normalizeExcludePaths trims whitespace, drops empty entries, and fully expands
+// and cleans each exclude path so that comparisons and cache keys are stable
+// regardless of trailing slashes, leading spaces, or path separator style.
+func normalizeExcludePaths(paths []string) []string {
+	result := make([]string, 0, len(paths))
+	for _, p := range paths {
+		trimmed := strings.TrimSpace(p)
+		if trimmed == "" {
+			continue
+		}
+		expanded := expandPath(trimmed)
+		if expanded != "" && expanded != "." {
+			result = append(result, filepath.Clean(filepath.FromSlash(expanded)))
+		}
+	}
+	return result
 }
 
 // expandPath expands home directory variables and environment variables in a path.

@@ -118,15 +118,22 @@ func BuildIndex(ctx context.Context, input BuildIndexInput) (*FileIndex, error) 
 		expandedDirs = append(expandedDirs, expanded)
 	}
 
-	// Expand and normalize exclude paths so that inputs like "~/repos/" or
-	// Windows forward-slash paths match correctly inside isExcludedPath.
+	// Expand and normalize exclude paths. TrimSpace before expansion so that
+	// entries like " ~/repos " correctly expand the ~ prefix. Empty entries
+	// after trimming are dropped so they cannot accidentally match all paths.
 	expandedExcludes := make([]string, 0, len(input.ExcludePaths))
 	for _, p := range input.ExcludePaths {
-		expanded := expandHomeDir(p)
+		trimmed := strings.TrimSpace(p)
+		if trimmed == "" {
+			continue
+		}
+		expanded := expandHomeDir(trimmed)
 		if expanded != "" {
 			expanded = filepath.Clean(filepath.FromSlash(expanded))
 		}
-		expandedExcludes = append(expandedExcludes, expanded)
+		if expanded != "" {
+			expandedExcludes = append(expandedExcludes, expanded)
+		}
 	}
 	input.ExcludePaths = expandedExcludes
 
@@ -348,8 +355,10 @@ func walkDirectory(
 }
 
 // isExcludedPath reports whether path should be skipped during file index building.
-// A path is excluded if it equals any entry in excludePaths, or is a child of one.
+// A path is excluded if it equals any entry in excludePaths, or is a descendant of one.
 // excludePaths must already be expanded and normalized (no ~ or $HOME variables).
+// filepath.Rel is used for the containment check so that root or volume-root excludes
+// (e.g. "/" on Unix) are handled correctly.
 func isExcludedPath(path string, excludePaths []string) bool {
 	cleanedPath := filepath.Clean(path)
 	for _, excluded := range excludePaths {
@@ -358,7 +367,15 @@ func isExcludedPath(path string, excludePaths []string) bool {
 			continue
 		}
 		cleanedExcluded := filepath.Clean(trimmed)
-		if cleanedPath == cleanedExcluded || strings.HasPrefix(cleanedPath, cleanedExcluded+string(os.PathSeparator)) {
+		if cleanedPath == cleanedExcluded {
+			return true
+		}
+		rel, err := filepath.Rel(cleanedExcluded, cleanedPath)
+		if err != nil {
+			continue
+		}
+		// rel starts with ".." only when cleanedPath is outside cleanedExcluded
+		if rel != ".." && !strings.HasPrefix(rel, ".."+string(os.PathSeparator)) {
 			return true
 		}
 	}
