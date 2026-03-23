@@ -164,6 +164,7 @@ func (c *Collector) buildFileIndex(ctx context.Context) (*fileindex.FileIndex, e
 
 	input := fileindex.BuildIndexInput{
 		BaseDirs:         baseDirs,
+		ExcludePaths:     c.config.FileIndex.ExcludePaths,
 		Patterns:         patterns,
 		MaxDepth:         c.config.FileIndex.MaxDepth,
 		FollowSymlinks:   c.config.FileIndex.FollowSymlinks,
@@ -207,6 +208,7 @@ func (c *Collector) loadFromCache(ctx context.Context, baseDirs []string, patter
 
 	index, err := c.cacheStore.Load(ctx, cache.LoadInput{
 		BaseDirs:       baseDirs,
+		ExcludePaths:   c.config.FileIndex.ExcludePaths,
 		Patterns:       patterns,
 		MaxDepth:       c.config.FileIndex.MaxDepth,
 		FollowSymlinks: c.config.FileIndex.FollowSymlinks,
@@ -228,6 +230,7 @@ func (c *Collector) saveToCache(ctx context.Context, baseDirs []string, patterns
 
 	if err := c.cacheStore.Save(ctx, cache.SaveInput{
 		BaseDirs:       baseDirs,
+		ExcludePaths:   c.config.FileIndex.ExcludePaths,
 		Patterns:       patterns,
 		MaxDepth:       c.config.FileIndex.MaxDepth,
 		FollowSymlinks: c.config.FileIndex.FollowSymlinks,
