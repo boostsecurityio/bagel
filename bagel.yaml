@@ -8,6 +8,12 @@ probes:
     enabled: true
   gh:
     enabled: true
+  ai_cli:
+    enabled: true
+    flags:
+      # max_file_size: maximum bytes to read from an AI CLI file before skipping it.
+      # Prevents scan hangs on large conversation histories. Default: 1048576 (1 MB).
+      # max_file_size: 1048576
 privacy:
   redact_paths: []
   exclude_env_prefixes: []

@@ -7,6 +7,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/boostsecurityio/bagel/pkg/detector"
@@ -103,4 +104,73 @@ func TestAICliProbe_Execute(t *testing.T) {
 	finding := findings[0]
 	assert.Equal(t, "jwt-jwt-token", finding.ID)
 	assert.Equal(t, "jwt-token", finding.Metadata["token_type"])
+}
+
+func TestAICliProbe_OversizedFileSkipped(t *testing.T) {
+	tmpDir := t.TempDir()
+	ctx := context.Background()
+
+	// Create a chat file that exceeds the 1MB size limit
+	chatDir := filepath.Join(tmpDir, ".claude", "projects", "test-session")
+	err := os.MkdirAll(chatDir, 0700)
+	require.NoError(t, err)
+
+	chatPath := filepath.Join(chatDir, "conversation.jsonl")
+	// Each line ~130 chars; repeat enough times to exceed 1MB
+	line := `{"type":"text","content":"eyJhbGciOiJIUzUxMiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.placeholder"}` + "\n"
+	largeContent := strings.Repeat(line, 12000) // ~1.2MB
+	err = os.WriteFile(chatPath, []byte(largeContent), 0600)
+	require.NoError(t, err)
+
+	// Confirm the file is actually over the default limit
+	info, err := os.Stat(chatPath)
+	require.NoError(t, err)
+	require.Greater(t, info.Size(), int64(defaultMaxFileSize), "test file must exceed the default maxFileSize")
+
+	// Build file index pointing at the oversized file
+	index := fileindex.NewFileIndex()
+	index.Add("claude_chats", chatPath)
+
+	registry := detector.NewRegistry()
+	registry.Register(detector.NewJWTDetector())
+
+	probe := NewAICliProbe(models.ProbeSettings{Enabled: true}, registry)
+	probe.SetFileIndex(index)
+
+	findings, err := probe.Execute(ctx)
+	require.NoError(t, err)
+
+	assert.Empty(t, findings, "oversized chat file must be skipped entirely")
+}
+
+func TestAICliProbe_CustomMaxFileSizeFlag(t *testing.T) {
+	tmpDir := t.TempDir()
+	ctx := context.Background()
+
+	// Create a small file that would pass the default 1 MB limit but exceed a tiny custom limit
+	chatDir := filepath.Join(tmpDir, ".claude", "projects", "test-session")
+	err := os.MkdirAll(chatDir, 0700)
+	require.NoError(t, err)
+
+	chatPath := filepath.Join(chatDir, "conversation.jsonl")
+	// Write 2 KB — well under the 1 MB default, so it would be scanned without a custom limit
+	err = os.WriteFile(chatPath, []byte(strings.Repeat("x", 2*1024)), 0600)
+	require.NoError(t, err)
+
+	index := fileindex.NewFileIndex()
+	index.Add("claude_chats", chatPath)
+
+	registry := detector.NewRegistry()
+	registry.Register(detector.NewJWTDetector())
+
+	// Set max_file_size to 1 KB so the 2 KB file is skipped
+	probe := NewAICliProbe(models.ProbeSettings{
+		Enabled: true,
+		Flags:   map[string]interface{}{"max_file_size": 1024},
+	}, registry)
+	probe.SetFileIndex(index)
+
+	findings, err := probe.Execute(ctx)
+	require.NoError(t, err)
+	assert.Empty(t, findings, "file exceeding custom max_file_size must be skipped")
 }

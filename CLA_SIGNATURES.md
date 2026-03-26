@@ -4,3 +4,4 @@ Talgarr - Sebastien Graveline
 julien-boost - Julien Champoux
 GuillaumeRoss - Guillaume Ross
 c0tton-fluff - Michal Ambrozkiewicz
+tveronezi - Thiago Veronezi
