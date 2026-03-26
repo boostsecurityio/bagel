@@ -100,6 +100,7 @@ type Pattern struct {
 // BuildIndexInput holds the input parameters for building a file index
 type BuildIndexInput struct {
 	BaseDirs         []string              // Base directories to search (e.g., ["$HOME"])
+	ExcludePaths     []string              // Paths to skip entirely (e.g., ["~/repos", "~/.cache"])
 	Patterns         []Pattern             // Patterns to match
 	MaxDepth         int                   // Maximum recursion depth (0 = unlimited)
 	FollowSymlinks   bool                  // Whether to follow symbolic links
@@ -116,6 +117,25 @@ func BuildIndex(ctx context.Context, input BuildIndexInput) (*FileIndex, error) 
 		expanded := expandHomeDir(dir)
 		expandedDirs = append(expandedDirs, expanded)
 	}
+
+	// Expand and normalize exclude paths. TrimSpace before expansion so that
+	// entries like " ~/repos " correctly expand the ~ prefix. Empty entries
+	// after trimming are dropped so they cannot accidentally match all paths.
+	expandedExcludes := make([]string, 0, len(input.ExcludePaths))
+	for _, p := range input.ExcludePaths {
+		trimmed := strings.TrimSpace(p)
+		if trimmed == "" {
+			continue
+		}
+		expanded := expandHomeDir(trimmed)
+		if expanded != "" {
+			expanded = filepath.Clean(filepath.FromSlash(expanded))
+		}
+		if expanded != "" {
+			expandedExcludes = append(expandedExcludes, expanded)
+		}
+	}
+	input.ExcludePaths = expandedExcludes
 
 	log.Ctx(ctx).Info().
 		Strs("base_dirs", expandedDirs).
@@ -228,6 +248,14 @@ func walkDirectory(
 		return
 	}
 
+	// Check if current directory is excluded
+	if isExcludedPath(currentDir, input.ExcludePaths) {
+		log.Ctx(ctx).Debug().
+			Str("dir", currentDir).
+			Msg("Skipping excluded directory")
+		return
+	}
+
 	// Check if context is cancelled
 	select {
 	case <-ctx.Done():
@@ -324,6 +352,34 @@ func walkDirectory(
 		matchFile(ctx, baseDir, fullPath, patterns, index)
 		filesProcessed.Add(1)
 	}
+}
+
+// isExcludedPath reports whether path should be skipped during file index building.
+// A path is excluded if it equals any entry in excludePaths, or is a descendant of one.
+// excludePaths must already be expanded and normalized (no ~ or $HOME variables).
+// filepath.Rel is used for the containment check so that root or volume-root excludes
+// (e.g. "/" on Unix) are handled correctly.
+func isExcludedPath(path string, excludePaths []string) bool {
+	cleanedPath := filepath.Clean(path)
+	for _, excluded := range excludePaths {
+		trimmed := strings.TrimSpace(excluded)
+		if trimmed == "" {
+			continue
+		}
+		cleanedExcluded := filepath.Clean(trimmed)
+		if cleanedPath == cleanedExcluded {
+			return true
+		}
+		rel, err := filepath.Rel(cleanedExcluded, cleanedPath)
+		if err != nil {
+			continue
+		}
+		// rel starts with ".." only when cleanedPath is outside cleanedExcluded
+		if rel != ".." && !strings.HasPrefix(rel, ".."+string(os.PathSeparator)) {
+			return true
+		}
+	}
+	return false
 }
 
 // expandHomeDir expands $HOME, %USERPROFILE%, and ~ to the user's home directory.

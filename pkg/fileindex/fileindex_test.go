@@ -654,3 +654,58 @@ func TestBuildIndex_Concurrent_MultipleBaseDirs(t *testing.T) {
 	assert.Contains(t, gitconfigs, filepath.Join(tmpDir2, ".gitconfig"))
 	assert.Contains(t, gitconfigs, filepath.Join(tmpDir3, ".gitconfig"))
 }
+
+func TestBuildIndex_WithExcludePaths(t *testing.T) {
+	t.Parallel()
+
+	tmpDir := t.TempDir()
+
+	// Create a structure with files in both an included and an excluded directory
+	includedDir := filepath.Join(tmpDir, "home")
+	excludedDir := filepath.Join(tmpDir, "repos")
+
+	for _, dir := range []string{includedDir, filepath.Join(includedDir, ".ssh"), excludedDir, filepath.Join(excludedDir, "proj", ".ssh")} {
+		require.NoError(t, os.MkdirAll(dir, 0755))
+	}
+
+	require.NoError(t, os.WriteFile(filepath.Join(includedDir, ".gitconfig"), []byte("included"), 0644))
+	require.NoError(t, os.WriteFile(filepath.Join(includedDir, ".ssh", "config"), []byte("included"), 0644))
+	require.NoError(t, os.WriteFile(filepath.Join(excludedDir, ".gitconfig"), []byte("excluded"), 0644))
+	require.NoError(t, os.WriteFile(filepath.Join(excludedDir, "proj", ".ssh", "config"), []byte("excluded"), 0644))
+
+	patterns := []Pattern{
+		{
+			Name:     "gitconfig",
+			Patterns: []string{".gitconfig"},
+			Type:     PatternTypeExact,
+		},
+		{
+			Name:     "ssh_config",
+			Patterns: []string{".ssh/config"},
+			Type:     PatternTypeGlob,
+		},
+	}
+
+	input := BuildIndexInput{
+		BaseDirs:       []string{tmpDir},
+		ExcludePaths:   []string{excludedDir},
+		Patterns:       patterns,
+		MaxDepth:       0,
+		FollowSymlinks: false,
+	}
+
+	ctx := context.Background()
+	index, err := BuildIndex(ctx, input)
+	require.NoError(t, err)
+
+	// Only files outside the excluded directory should be found
+	gitconfigs := index.Get("gitconfig")
+	assert.Len(t, gitconfigs, 1)
+	assert.Contains(t, gitconfigs, filepath.Join(includedDir, ".gitconfig"))
+	assert.NotContains(t, gitconfigs, filepath.Join(excludedDir, ".gitconfig"))
+
+	sshConfigs := index.Get("ssh_config")
+	assert.Len(t, sshConfigs, 1)
+	assert.Contains(t, sshConfigs, filepath.Join(includedDir, ".ssh", "config"))
+	assert.NotContains(t, sshConfigs, filepath.Join(excludedDir, "proj", ".ssh", "config"))
+}

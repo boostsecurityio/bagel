@@ -23,8 +23,8 @@ import (
 
 const (
 	// SchemaVersion is incremented when the cache format changes.
-	// Bumped to 3: added staleness detection fields (BaseDirModTimes, FileSample, TotalFileCount).
-	SchemaVersion = 3
+	// Bumped to 4: added ExcludePaths to Metadata for cache key validation.
+	SchemaVersion = 4
 	// cacheFilePrefix is the prefix for cache files
 	cacheFilePrefix = "fileindex-"
 )
@@ -33,7 +33,8 @@ const (
 type Metadata struct {
 	SchemaVersion  int       `json:"schema_version"`
 	CreatedAt      time.Time `json:"created_at"`
-	BaseDirs       []string  `json:"base_dirs"` // Stored as expanded paths
+	BaseDirs       []string  `json:"base_dirs"`     // Stored as expanded paths
+	ExcludePaths   []string  `json:"exclude_paths"` // Stored as expanded paths
 	PatternsHash   string    `json:"patterns_hash"`
 	MaxDepth       int       `json:"max_depth"`
 	FollowSymlinks bool      `json:"follow_symlinks"`
@@ -110,6 +111,7 @@ func GetCacheDir() (string, error) {
 // LoadInput holds the parameters for loading a cached file index
 type LoadInput struct {
 	BaseDirs       []string
+	ExcludePaths   []string
 	Patterns       []fileindex.Pattern
 	MaxDepth       int
 	FollowSymlinks bool
@@ -124,6 +126,7 @@ func (s *Store) Load(ctx context.Context, input LoadInput) (*fileindex.FileIndex
 
 	cacheFile := s.cacheFilePath(cacheKeyInput{
 		baseDirs:       input.BaseDirs,
+		excludePaths:   input.ExcludePaths,
 		patterns:       input.Patterns,
 		maxDepth:       input.MaxDepth,
 		followSymlinks: input.FollowSymlinks,
@@ -189,6 +192,14 @@ func (s *Store) Load(ctx context.Context, input LoadInput) (*fileindex.FileIndex
 		return nil, nil
 	}
 
+	// Validate ExcludePaths match (compare fully normalized, sorted paths)
+	sortedCachedExcludes := sortedCopy(cached.Metadata.ExcludePaths)
+	sortedInputExcludes := sortedCopy(normalizeExcludePaths(input.ExcludePaths))
+	if !slicesEqual(sortedCachedExcludes, sortedInputExcludes) {
+		logger.Debug().Msg("Cache exclude paths mismatch")
+		return nil, nil
+	}
+
 	// Check for cache staleness
 	stalenessResult := checkStaleness(StalenessCheckInput{
 		Metadata:      cached.Metadata,
@@ -223,6 +234,7 @@ func (s *Store) Load(ctx context.Context, input LoadInput) (*fileindex.FileIndex
 // SaveInput holds the parameters for saving a file index to cache
 type SaveInput struct {
 	BaseDirs       []string
+	ExcludePaths   []string
 	Patterns       []fileindex.Pattern
 	MaxDepth       int
 	FollowSymlinks bool
@@ -239,8 +251,9 @@ func (s *Store) Save(ctx context.Context, input SaveInput) error {
 		return fmt.Errorf("create cache directory: %w", err)
 	}
 
-	// Store expanded paths for consistent comparison on load
+	// Store expanded and normalized paths for consistent comparison on load
 	expandedDirs := ExpandBaseDirs(input.BaseDirs)
+	expandedExcludes := normalizeExcludePaths(input.ExcludePaths)
 	entries := input.Index.GetAll()
 
 	cached := CachedFileIndex{
@@ -248,6 +261,7 @@ func (s *Store) Save(ctx context.Context, input SaveInput) error {
 			SchemaVersion:   SchemaVersion,
 			CreatedAt:       time.Now(),
 			BaseDirs:        expandedDirs,
+			ExcludePaths:    expandedExcludes,
 			PatternsHash:    computePatternsHash(input.Patterns),
 			MaxDepth:        input.MaxDepth,
 			FollowSymlinks:  input.FollowSymlinks,
@@ -265,6 +279,7 @@ func (s *Store) Save(ctx context.Context, input SaveInput) error {
 
 	cacheFile := s.cacheFilePath(cacheKeyInput{
 		baseDirs:       input.BaseDirs,
+		excludePaths:   input.ExcludePaths,
 		patterns:       input.Patterns,
 		maxDepth:       input.MaxDepth,
 		followSymlinks: input.FollowSymlinks,
@@ -324,6 +339,7 @@ func (s *Store) cacheFilePath(input cacheKeyInput) string {
 // cacheKeyInput holds parameters for computing the cache key
 type cacheKeyInput struct {
 	baseDirs       []string
+	excludePaths   []string
 	patterns       []fileindex.Pattern
 	maxDepth       int
 	followSymlinks bool
@@ -343,6 +359,14 @@ func computeCacheKey(input cacheKeyInput) string {
 		fmt.Fprintf(h, "dir:%s\n", dir)
 	}
 
+	// Normalize and sort exclude paths for consistent hashing; empty/whitespace
+	// entries are dropped so they do not affect the cache key.
+	normalizedExcludes := normalizeExcludePaths(input.excludePaths)
+	sort.Strings(normalizedExcludes)
+	for _, p := range normalizedExcludes {
+		fmt.Fprintf(h, "exclude:%s\n", p)
+	}
+
 	// Include patterns hash
 	fmt.Fprintf(h, "patterns:%s\n", computePatternsHash(input.patterns))
 
@@ -351,6 +375,14 @@ func computeCacheKey(input cacheKeyInput) string {
 	fmt.Fprintf(h, "followSymlinks:%t\n", input.followSymlinks)
 
 	return hex.EncodeToString(h.Sum(nil))[:16]
+}
+
+// sortedCopy returns a sorted copy of a string slice
+func sortedCopy(s []string) []string {
+	c := make([]string, len(s))
+	copy(c, s)
+	sort.Strings(c)
+	return c
 }
 
 // computePatternsHash computes a hash of the patterns configuration
@@ -399,6 +431,24 @@ func ExpandBaseDirs(baseDirs []string) []string {
 		expanded = append(expanded, expandPath(dir))
 	}
 	return expanded
+}
+
+// normalizeExcludePaths trims whitespace, drops empty entries, and fully expands
+// and cleans each exclude path so that comparisons and cache keys are stable
+// regardless of trailing slashes, leading spaces, or path separator style.
+func normalizeExcludePaths(paths []string) []string {
+	result := make([]string, 0, len(paths))
+	for _, p := range paths {
+		trimmed := strings.TrimSpace(p)
+		if trimmed == "" {
+			continue
+		}
+		expanded := expandPath(trimmed)
+		if expanded != "" && expanded != "." {
+			result = append(result, filepath.Clean(filepath.FromSlash(expanded)))
+		}
+	}
+	return result
 }
 
 // expandPath expands home directory variables and environment variables in a path.
