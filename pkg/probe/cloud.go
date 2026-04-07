@@ -69,12 +69,15 @@ func (p *CloudProbe) Execute(ctx context.Context) ([]models.Finding, error) {
 	gcpCredentials := p.fileIndex.Get("gcp_credentials")
 	azureConfig := p.fileIndex.Get("azure_config")
 
+	vaultTokenFiles := p.fileIndex.Get("vault_token")
+
 	log.Ctx(ctx).Debug().
 		Int("aws_config_count", len(awsConfig)).
 		Int("aws_credentials_count", len(awsCredentials)).
 		Int("gcp_config_count", len(gcpConfig)).
 		Int("gcp_credentials_count", len(gcpCredentials)).
 		Int("azure_config_count", len(azureConfig)).
+		Int("vault_token_count", len(vaultTokenFiles)).
 		Msg("Found cloud credential files")
 
 	// Process AWS files
@@ -103,7 +106,47 @@ func (p *CloudProbe) Execute(ctx context.Context) ([]models.Finding, error) {
 		findings = append(findings, fileFindings...)
 	}
 
+	// Process Vault token file
+	for _, filePath := range vaultTokenFiles {
+		fileFindings := p.processCloudFile(ctx, filePath)
+		findings = append(findings, fileFindings...)
+	}
+
+	// Check for Kubernetes service account token (system path, outside home dir)
+	findings = append(findings, p.checkK8sServiceAccountToken(ctx)...)
+
 	return findings, nil
+}
+
+const k8sServiceAccountTokenPath = "/var/run/secrets/kubernetes.io/serviceaccount/token"
+
+// checkK8sServiceAccountToken checks for the presence of a Kubernetes service account token
+func (p *CloudProbe) checkK8sServiceAccountToken(ctx context.Context) []models.Finding {
+	if _, err := os.Stat(k8sServiceAccountTokenPath); err != nil {
+		return nil
+	}
+
+	log.Ctx(ctx).Debug().
+		Str("path", k8sServiceAccountTokenPath).
+		Msg("Found Kubernetes service account token")
+
+	return []models.Finding{
+		{
+			ID:          "k8s-service-account-token",
+			Type:        models.FindingTypeSecret,
+			Fingerprint: models.FingerprintFromFields("k8s-service-account-token", k8sServiceAccountTokenPath),
+			Probe:       p.Name(),
+			Severity:    "high",
+			Title:       "Kubernetes Service Account Token Found",
+			Description: "A Kubernetes service account token is mounted at the default path. " +
+				"Verify this token has minimal RBAC permissions and consider disabling automountServiceAccountToken if not needed.",
+			Message: "Kubernetes service account token found at " + k8sServiceAccountTokenPath,
+			Path:    k8sServiceAccountTokenPath,
+			Metadata: map[string]interface{}{
+				"token_path": k8sServiceAccountTokenPath,
+			},
+		},
+	}
 }
 
 // processCloudFile reads and analyzes a cloud credential file

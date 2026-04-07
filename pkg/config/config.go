@@ -66,6 +66,8 @@ func setDefaults(v *viper.Viper) {
 	v.SetDefault("probes.jetbrains.enabled", true)
 	v.SetDefault("probes.gh.enabled", true)
 	v.SetDefault("probes.ai_cli.enabled", true)
+	v.SetDefault("probes.wireguard.enabled", true)
+	v.SetDefault("probes.pypi.enabled", true)
 	v.SetDefault("output.include_file_hashes", false)
 	v.SetDefault("output.include_file_content", false)
 
@@ -177,6 +179,23 @@ func setDefaults(v *viper.Viper) {
 		{"name": "codex_chats", "patterns": []string{".codex/sessions/*/*/*/rollout-*.jsonl"}, "type": "glob"},
 		{"name": "claude_chats", "patterns": []string{".claude/projects/*/*.jsonl"}, "type": "glob"},
 		{"name": "opencode_chats", "patterns": []string{".local/share/opencode/storage/part/msg_*/prt_*.json"}, "type": "glob"},
+
+		// WireGuard (user-level configs; system paths are checked directly by the probe)
+		{"name": "wireguard_config", "patterns": []string{".config/wireguard/*.conf"}, "type": "glob"},
+
+		// HashiCorp Vault
+		{"name": "vault_token", "patterns": []string{".vault-token"}, "type": "glob"},
+
+		// PyPI
+		{"name": "pypirc", "patterns": []string{".pypirc"}, "type": "glob"},
+		{"name": "pip_config", "patterns": []string{
+			".pip/pip.conf",
+			".config/pip/pip.conf",
+			// macOS
+			"Library/Application Support/pip/pip.conf",
+			// Windows
+			"AppData/Roaming/pip/pip.ini",
+		}, "type": "glob"},
 	})
 }
 

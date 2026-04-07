@@ -117,6 +117,9 @@ func initializeProbes(cfg *models.Config) []probe.Probe {
 	registry.Register(detector.NewAIServiceDetector())
 	registry.Register(detector.NewHTTPAuthDetector())
 	registry.Register(detector.NewCloudCredentialsDetector())
+	registry.Register(detector.NewVaultTokenDetector())
+	registry.Register(detector.NewPyPITokenDetector())
+	registry.Register(detector.NewWireGuardKeyDetector())
 	registry.Register(detector.NewGenericAPIKeyDetector())
 	registry.Register(detector.NewJWTDetector())
 	// Add more detectors here as they are implemented:
@@ -166,6 +169,16 @@ func initializeProbes(cfg *models.Config) []probe.Probe {
 	// AI CLI probe
 	if cfg.Probes.AICli.Enabled {
 		probes = append(probes, probe.NewAICliProbe(cfg.Probes.AICli, registry))
+	}
+
+	// WireGuard probe
+	if cfg.Probes.WireGuard.Enabled {
+		probes = append(probes, probe.NewWireGuardProbe(cfg.Probes.WireGuard, registry))
+	}
+
+	// PyPI probe
+	if cfg.Probes.PyPI.Enabled {
+		probes = append(probes, probe.NewPyPIProbe(cfg.Probes.PyPI, registry))
 	}
 
 	return probes
