@@ -4,11 +4,16 @@
 package probe
 
 import (
+	"context"
+	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/boostsecurityio/bagel/pkg/detector"
+	"github.com/boostsecurityio/bagel/pkg/fileindex"
 	"github.com/boostsecurityio/bagel/pkg/models"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestParseGitConfig(t *testing.T) {
@@ -461,4 +466,71 @@ func TestScanGitConfigForSecrets(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestGitProbe_ScanCredentialFiles(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	// Create a git-credentials file with a GitHub PAT
+	credPath := filepath.Join(tmpDir, ".git-credentials")
+	credContent := "https://ghp_1234567890123456789012345678901234AB:x-oauth-basic@github.com\n"
+	err := os.WriteFile(credPath, []byte(credContent), 0600)
+	require.NoError(t, err)
+
+	index := fileindex.NewFileIndex()
+	index.Add("git_credentials", credPath)
+
+	registry := detector.NewRegistry()
+	registry.Register(detector.NewGitHubPATDetector())
+	registry.Register(detector.NewHTTPAuthDetector())
+
+	probe := &GitProbe{
+		enabled:          true,
+		config:           models.ProbeSettings{Enabled: true},
+		detectorRegistry: registry,
+		fileIndex:        index,
+	}
+
+	ctx := context.Background()
+	findings := probe.scanCredentialFiles(ctx)
+
+	assert.NotEmpty(t, findings, "Should detect credentials in git-credentials file")
+
+	hasGitHubToken := false
+	for _, f := range findings {
+		if f.ID == "github-token-classic-pat" {
+			hasGitHubToken = true
+		}
+	}
+	assert.True(t, hasGitHubToken, "Should detect GitHub PAT in credential file")
+}
+
+func TestGitProbe_ScanCredentialFilesNoFileIndex(t *testing.T) {
+	registry := detector.NewRegistry()
+	probe := &GitProbe{
+		enabled:          true,
+		config:           models.ProbeSettings{Enabled: true},
+		detectorRegistry: registry,
+	}
+
+	ctx := context.Background()
+	findings := probe.scanCredentialFiles(ctx)
+	assert.Empty(t, findings)
+}
+
+func TestGitProbe_ScanCredentialFilesMissing(t *testing.T) {
+	index := fileindex.NewFileIndex()
+	index.Add("git_credentials", "/nonexistent/.git-credentials")
+
+	registry := detector.NewRegistry()
+	probe := &GitProbe{
+		enabled:          true,
+		config:           models.ProbeSettings{Enabled: true},
+		detectorRegistry: registry,
+		fileIndex:        index,
+	}
+
+	ctx := context.Background()
+	findings := probe.scanCredentialFiles(ctx)
+	assert.Empty(t, findings)
 }

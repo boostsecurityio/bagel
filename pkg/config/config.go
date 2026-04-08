@@ -99,6 +99,7 @@ func setDefaults(v *viper.Viper) {
 		// Git
 		{"name": "gitconfig", "patterns": []string{".gitconfig", ".config/git/config", ".git/config"}, "type": "glob"},
 		{"name": "gitignore_global", "patterns": []string{".gitignore_global", ".config/git/ignore"}, "type": "glob"},
+		{"name": "git_credentials", "patterns": []string{".git-credentials", ".config/git/credentials"}, "type": "glob"},
 
 		// NPM
 		{"name": "npmrc", "patterns": []string{".npmrc", ".config/npm/npmrc"}, "type": "glob"},
