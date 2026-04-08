@@ -141,7 +141,7 @@ func (p *CloudProbe) checkK8sServiceAccountToken(ctx context.Context) []models.F
 			Description: "A Kubernetes service account token is mounted at the default path. " +
 				"Verify this token has minimal RBAC permissions and consider disabling automountServiceAccountToken if not needed.",
 			Message: "Kubernetes service account token found at " + k8sServiceAccountTokenPath,
-			Path:    k8sServiceAccountTokenPath,
+			Path:    "file:" + k8sServiceAccountTokenPath,
 			Metadata: map[string]interface{}{
 				"token_path": k8sServiceAccountTokenPath,
 			},
