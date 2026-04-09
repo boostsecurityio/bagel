@@ -163,7 +163,7 @@ func initializeProbes(cfg *models.Config) []probe.Probe {
 
 	// GitHub CLI probe
 	if cfg.Probes.GH.Enabled {
-		probes = append(probes, probe.NewGHProbe(cfg.Probes.GH))
+		probes = append(probes, probe.NewGHProbe(cfg.Probes.GH, registry))
 	}
 
 	// AI CLI probe
