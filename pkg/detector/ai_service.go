@@ -46,28 +46,33 @@ func NewAIServiceDetector() *AIServiceDetector {
 				regex:       regexp.MustCompile(`\b(sk-(?:proj|svcacct|admin)-(?:[A-Za-z0-9_-]{74}|[A-Za-z0-9_-]{58})T3BlbkFJ(?:[A-Za-z0-9_-]{74}|[A-Za-z0-9_-]{58})\b|sk-[a-zA-Z0-9]{20}T3BlbkFJ[a-zA-Z0-9]{20})(?:[\x60'"\s;]|\\[nr]|$)`),
 				tokenType:   "openai-api-key",
 				description: "OpenAI API Key",
+				title:       "OpenAI API Key Detected",
 			},
 			"anthropic": {
 				// Remove backslash before hyphen in character class
 				regex:       regexp.MustCompile(`\b(sk-ant-api03-[a-zA-Z0-9_\-]{93}AA)(?:[\x60'"\s;]|\\[nr]|$)`),
 				tokenType:   "anthropic-api-key",
 				description: "Anthropic API Key",
+				title:       "Anthropic API Key Detected",
 			},
 			"anthropic_admin": {
 				// Remove backslash before hyphen in character class
 				regex:       regexp.MustCompile(`\b(sk-ant-admin01-[a-zA-Z0-9_\-]{93}AA)(?:[\x60'"\s;]|\\[nr]|$)`),
 				tokenType:   "anthropic-admin-api-key",
 				description: "Anthropic Admin API Key",
+				title:       "Anthropic Admin API Key Detected",
 			},
 			"huggingface": {
 				regex:       regexp.MustCompile(`\b(hf_(?i:[a-z]{34}))(?:[\x60'"\s;]|\\[nr]|$)`),
 				tokenType:   "huggingface-access-token",
 				description: "Hugging Face Access Token",
+				title:       "Hugging Face Access Token Detected",
 			},
 			"huggingface_org": {
 				regex:       regexp.MustCompile(`\b(api_org_(?i:[a-z]{34}))(?:[\x60'"\s;]|\\[nr]|$)`),
 				tokenType:   "huggingface-org-token",
 				description: "Hugging Face Organization API Token",
+				title:       "Hugging Face API Token Detected",
 			},
 		},
 	}
@@ -108,7 +113,7 @@ func (d *AIServiceDetector) createFinding(token string, pattern *tokenPattern, c
 		Type:        models.FindingTypeSecret,
 		Fingerprint: models.SaltedFingerprint(token, ctx.FingerprintSalt),
 		Severity:    "critical",
-		Title:       "AI Service API Key Detected",
+		Title:       pattern.title,
 		Description: "AI service credentials provide access to paid services and may incur costs or expose sensitive data. " +
 			"Revoke this key immediately and rotate with a new one stored securely.",
 		Message: fmt.Sprintf("A %s was detected in %s.", pattern.description, ctx.FormatSource()),

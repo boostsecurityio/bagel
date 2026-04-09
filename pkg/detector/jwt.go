@@ -37,6 +37,7 @@ func NewJWTDetector() *JWTDetector {
 				regex:       regexp.MustCompile(`\b(ey[A-Za-z0-9-_]+\.[A-Za-z0-9-_]+\.[A-Za-z0-9-_]+)\b($|[^.])`),
 				tokenType:   "jwt-token",
 				description: "JWT Token",
+				title:       "JWT Token Detected",
 			},
 			"jwe-token": {
 				// Matches: <base64_header>.<base64_enc_key>.<base64_iv>.<base64_ct>.<base64_tag>
@@ -45,6 +46,7 @@ func NewJWTDetector() *JWTDetector {
 				regex:       regexp.MustCompile(`\b(ey[A-Za-z0-9-_]+(?:\.[A-Za-z0-9-_]+){4})\b`),
 				tokenType:   "jwe-token",
 				description: "JWE Token",
+				title:       "JWE Token Detected",
 			},
 		},
 	}
@@ -86,7 +88,7 @@ func (d *JWTDetector) createFinding(credential string, pattern *tokenPattern, ct
 		Type:        models.FindingTypeSecret,
 		Fingerprint: models.SaltedFingerprint(credential, ctx.FingerprintSalt),
 		Severity:    "critical",
-		Title:       "JWT Token Detected",
+		Title:       pattern.title,
 		Description: "JWT tokens in plain text can be exposed in logs, shell history, or configuration files. " +
 			"Use secure credential storage or secret management systems instead.",
 		Message: fmt.Sprintf("A %s was detected in %s.", pattern.description, ctx.FormatSource()),

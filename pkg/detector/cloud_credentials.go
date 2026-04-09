@@ -75,6 +75,7 @@ func NewCloudCredentialsDetector() *CloudCredentialsDetector {
 				regex:       regexp.MustCompile(`(?:^|[^A-Za-z0-9+/])([A-Za-z0-9+/]{88}==)(?:[^A-Za-z0-9+/=]|$)`),
 				tokenType:   "azure-storage-key",
 				description: "Azure Storage Account Key",
+				title:       "Azure Storage Account Key Detected",
 			},
 
 			// AWS Credentials
@@ -84,6 +85,7 @@ func NewCloudCredentialsDetector() *CloudCredentialsDetector {
 				regex:       regexp.MustCompile(`\b((?:A3T[A-Z0-9]|AKIA|ASIA|ABIA|ACCA)[A-Z2-7]{16})\b`),
 				tokenType:   "aws-access-key-id",
 				description: "AWS Access Key ID",
+				title:       "AWS Access Key ID Detected",
 			},
 
 			// Google Cloud Credentials
@@ -92,6 +94,7 @@ func NewCloudCredentialsDetector() *CloudCredentialsDetector {
 				regex:       regexp.MustCompile(`\b(AIza[A-Za-z0-9_-]{35})\b`),
 				tokenType:   "gcp-api-key",
 				description: "Google Cloud API Key",
+				title:       "Google Cloud API Key Detected",
 			},
 
 			// AWS Session Token (labeled)
@@ -99,6 +102,7 @@ func NewCloudCredentialsDetector() *CloudCredentialsDetector {
 				regex:       regexp.MustCompile(`(?:aws_session_token|AWS_SESSION_TOKEN|SessionToken)["\s:=]+([A-Za-z0-9+/=]{100,})`),
 				tokenType:   "aws-session-token",
 				description: "AWS Session Token",
+				title:       "AWS Session Token Detected",
 			},
 
 			// AWS STS Session Token (label-free, base64 prefix)
@@ -106,6 +110,7 @@ func NewCloudCredentialsDetector() *CloudCredentialsDetector {
 				regex:       regexp.MustCompile(`\b(IQoJb3JpZ2lu[A-Za-z0-9+/=]{100,})\b`),
 				tokenType:   "aws-sts-session-token",
 				description: "AWS STS Session Token",
+				title:       "AWS STS Session Token Detected",
 			},
 
 			// AWS Secret Access Key (labeled)
@@ -113,6 +118,7 @@ func NewCloudCredentialsDetector() *CloudCredentialsDetector {
 				regex:       regexp.MustCompile(`(?:aws_secret_access_key|secret_access_key|SecretAccessKey)["\s:=]+([A-Za-z0-9+/]{40})`),
 				tokenType:   "aws-secret-access-key",
 				description: "AWS Secret Access Key",
+				title:       "AWS Secret Access Key Detected",
 			},
 		},
 	}
@@ -163,7 +169,7 @@ func (d *CloudCredentialsDetector) createFinding(credential string, pattern *tok
 		Type:        models.FindingTypeSecret,
 		Fingerprint: models.SaltedFingerprint(credential, ctx.FingerprintSalt),
 		Severity:    "critical",
-		Title:       "Cloud Credential Detected",
+		Title:       pattern.title,
 		Description: "Cloud credentials provide access to infrastructure and services. " +
 			"Exposed credentials risk unauthorized access to cloud resources.",
 		Message: fmt.Sprintf("A %s was detected in %s.", pattern.description, ctx.FormatSource()),
