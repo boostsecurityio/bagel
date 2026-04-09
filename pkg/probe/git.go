@@ -12,7 +12,9 @@ import (
 	"strings"
 
 	"github.com/boostsecurityio/bagel/pkg/detector"
+	"github.com/boostsecurityio/bagel/pkg/fileindex"
 	"github.com/boostsecurityio/bagel/pkg/models"
+	"github.com/rs/zerolog/log"
 )
 
 // GitProbe checks Git configuration for security issues
@@ -20,6 +22,7 @@ type GitProbe struct {
 	enabled          bool
 	config           models.ProbeSettings
 	detectorRegistry *detector.Registry
+	fileIndex        *fileindex.FileIndex
 }
 
 // NewGitProbe creates a new Git probe
@@ -46,6 +49,11 @@ func (p *GitProbe) SetFingerprintSalt(salt string) {
 	p.detectorRegistry.SetFingerprintSalt(salt)
 }
 
+// SetFileIndex sets the file index for this probe (implements FileIndexAware)
+func (p *GitProbe) SetFileIndex(index *fileindex.FileIndex) {
+	p.fileIndex = index
+}
+
 // Execute runs the Git probe
 func (p *GitProbe) Execute(ctx context.Context) ([]models.Finding, error) {
 	findings := make([]models.Finding, 0, 4)
@@ -66,7 +74,46 @@ func (p *GitProbe) Execute(ctx context.Context) ([]models.Finding, error) {
 	// Scan git config for secrets using detector registry
 	findings = append(findings, p.scanGitConfigForSecrets(config)...)
 
+	// Scan git credential store files
+	findings = append(findings, p.scanCredentialFiles(ctx)...)
+
 	return findings, nil
+}
+
+// scanCredentialFiles scans git credential store files for secrets
+func (p *GitProbe) scanCredentialFiles(ctx context.Context) []models.Finding {
+	if p.fileIndex == nil {
+		return nil
+	}
+
+	credFiles := p.fileIndex.Get("git_credentials")
+
+	log.Ctx(ctx).Debug().
+		Int("count", len(credFiles)).
+		Msg("Found git credential files")
+
+	var findings []models.Finding
+	for _, filePath := range credFiles {
+		content, err := os.ReadFile(filePath)
+		if err != nil {
+			log.Ctx(ctx).Debug().
+				Err(err).
+				Str("file", filePath).
+				Msg("Cannot read git credential file")
+			continue
+		}
+
+		contentStr := string(content)
+
+		// Scan contents through detector registry (catches URLs with embedded tokens)
+		detCtx := models.NewDetectionContext(models.NewDetectionContextInput{
+			Source:    "file:" + filePath,
+			ProbeName: p.Name(),
+		})
+		findings = append(findings, p.detectorRegistry.DetectAll(contentStr, detCtx)...)
+	}
+
+	return findings
 }
 
 // checkGitConfig checks for insecure git configuration settings

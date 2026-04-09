@@ -88,6 +88,9 @@ func newScrubRegistry() *detector.Registry {
 	registry.Register(detector.NewSplunkTokenDetector())
 	registry.Register(detector.NewGitHubPATDetector())
 	registry.Register(detector.NewNPMTokenDetector())
+	registry.Register(detector.NewVaultTokenDetector())
+	registry.Register(detector.NewPyPITokenDetector())
+	registry.Register(detector.NewWireGuardKeyDetector())
 	registry.Register(detector.NewJWTDetector())
 	registry.Register(detector.NewGenericAPIKeyDetector())
 	return registry

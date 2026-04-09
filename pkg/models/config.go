@@ -30,6 +30,8 @@ type ProbeConfig struct {
 	JetBrains    ProbeSettings `yaml:"jetbrains" mapstructure:"jetbrains"`
 	GH           ProbeSettings `yaml:"gh" mapstructure:"gh"`
 	AICli        ProbeSettings `yaml:"ai_cli" mapstructure:"ai_cli"`
+	WireGuard    ProbeSettings `yaml:"wireguard" mapstructure:"wireguard"`
+	PyPI         ProbeSettings `yaml:"pypi" mapstructure:"pypi"`
 }
 
 // ProbeSettings contains settings for a specific probe
