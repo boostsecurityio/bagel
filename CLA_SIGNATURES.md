@@ -5,3 +5,4 @@ julien-boost - Julien Champoux
 GuillaumeRoss - Guillaume Ross
 c0tton-fluff - Michal Ambrozkiewicz
 tveronezi - Thiago Veronezi
+stlef14 - Stephan Lefrancois
