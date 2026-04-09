@@ -66,8 +66,10 @@ func (d *VaultTokenDetector) Detect(
 			seen[match] = true
 
 			tokenType := "vault-service-token"
+			title := "HashiCorp Vault Service Token Detected"
 			if match[0] == 's' {
 				tokenType = "vault-legacy-token"
+				title = "HashiCorp Vault Legacy Token Detected"
 			}
 
 			findings = append(findings, models.Finding{
@@ -75,7 +77,7 @@ func (d *VaultTokenDetector) Detect(
 				Type:        models.FindingTypeSecret,
 				Fingerprint: models.SaltedFingerprint(match, ctx.FingerprintSalt),
 				Severity:    "critical",
-				Title:       "HashiCorp Vault Token Detected",
+				Title:       title,
 				Description: "A HashiCorp Vault token was found. " +
 					"Vault tokens provide authenticated access to secrets stored in Vault.",
 				Message: fmt.Sprintf("A Vault token was detected in %s.", ctx.FormatSource()),

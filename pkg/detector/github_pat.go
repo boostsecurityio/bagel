@@ -20,6 +20,7 @@ type tokenPattern struct {
 	regex       *regexp.Regexp
 	tokenType   string
 	description string
+	title       string
 }
 
 // NewGitHubPATDetector creates a new GitHub token detector
@@ -30,31 +31,37 @@ func NewGitHubPATDetector() *GitHubTokenDetector {
 				regex:       regexp.MustCompile(`ghp_[A-Za-z0-9]{36}`),
 				tokenType:   "classic-pat",
 				description: "Classic Personal Access Token",
+				title:       "GitHub Classic Personal Access Token Detected",
 			},
 			"github_pat": {
 				regex:       regexp.MustCompile(`github_pat_\w{82}`),
 				tokenType:   "fine-grained-pat",
 				description: "Fine-grained Personal Access Token",
+				title:       "GitHub Fine-grained Personal Access Token Detected",
 			},
 			"gho": {
 				regex:       regexp.MustCompile(`gho_[A-Za-z0-9]{36}`),
 				tokenType:   "oauth-token",
 				description: "OAuth Access Token",
+				title:       "GitHub OAuth Access Token Detected",
 			},
 			"ghu": {
 				regex:       regexp.MustCompile(`ghu_[A-Za-z0-9]{36}`),
 				tokenType:   "app-user-token",
 				description: "GitHub App User-to-Server Token",
+				title:       "GitHub App User-to-Server Token Detected",
 			},
 			"ghs": {
 				regex:       regexp.MustCompile(`ghs_[A-Za-z0-9]{36}`),
 				tokenType:   "app-server-token",
 				description: "GitHub App Server-to-Server Token",
+				title:       "GitHub App Server-to-Server Token Detected",
 			},
 			"ghr": {
 				regex:       regexp.MustCompile(`ghr_[A-Za-z0-9]{36}`),
 				tokenType:   "refresh-token",
 				description: "GitHub Refresh Token",
+				title:       "GitHub Refresh Token Detected",
 			},
 		},
 		redactPatterns: []RedactPattern{
@@ -124,7 +131,7 @@ func (d *GitHubTokenDetector) createFinding(token string, pattern *tokenPattern,
 		Type:        models.FindingTypeSecret,
 		Fingerprint: models.SaltedFingerprint(token, ctx.FingerprintSalt),
 		Severity:    "critical",
-		Title:       "GitHub Token Detected",
+		Title:       pattern.title,
 		Description: "GitHub tokens provide access to your account and repositories.",
 		Message:     fmt.Sprintf("A %s was detected in %s.", pattern.description, ctx.FormatSource()),
 		Path:        ctx.Source,

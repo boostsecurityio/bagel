@@ -141,6 +141,28 @@ func (d *SSHPrivateKeyDetector) Redact(content string) (string, map[string]int) 
 	return ApplyRedactPatterns(content, d.redactPatterns)
 }
 
+const sshPrivateKeyDetectedSuffix = "Private Key Detected"
+
+// sshPrivateKeyTitle returns a finding title specific to the SSH private key type.
+func sshPrivateKeyTitle(keyType string) string {
+	var prefix string
+	switch strings.ToUpper(keyType) {
+	case "RSA":
+		prefix = "RSA SSH "
+	case "DSA":
+		prefix = "DSA SSH "
+	case "EC":
+		prefix = "EC SSH "
+	case "OPENSSH":
+		prefix = "OpenSSH "
+	case "PKCS8":
+		prefix = "PKCS8 SSH "
+	default:
+		prefix = "SSH "
+	}
+	return prefix + sshPrivateKeyDetectedSuffix
+}
+
 // createFinding creates a finding for a detected SSH private key
 func (d *SSHPrivateKeyDetector) createFinding(keyContent, keyType string, isEncrypted bool, ctx *models.DetectionContext) models.Finding {
 	var severity string
@@ -162,7 +184,7 @@ func (d *SSHPrivateKeyDetector) createFinding(keyContent, keyType string, isEncr
 		Type:        models.FindingTypeSecret,
 		Fingerprint: models.SaltedFingerprint(keyContent, ctx.FingerprintSalt),
 		Severity:    severity,
-		Title:       "SSH Private Key Detected",
+		Title:       sshPrivateKeyTitle(keyType),
 		Description: description,
 		Message:     fmt.Sprintf("A %s SSH private key was detected in %s.", keyType, ctx.FormatSource()),
 		Path:        ctx.Source,

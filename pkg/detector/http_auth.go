@@ -63,12 +63,14 @@ func NewHTTPAuthDetector() *HTTPAuthDetector {
 				regex:       regexp.MustCompile(`(?i)\bAuthorization:\s*(?:Bearer|(?:Api-)?Token)\s+([\w=~@.+/-]{16,})\b`),
 				tokenType:   "bearer-token",
 				description: "Bearer Token in Authorization Header",
+				title:       "HTTP Bearer Token Detected",
 			},
 			"basic-auth": {
 				// Matches: Authorization: Basic <base64>
 				regex:       regexp.MustCompile(`(?i)\bAuthorization:\s*Basic\s+([a-zA-Z0-9+/]{16,}={0,2})\b`),
 				tokenType:   "basic-auth",
 				description: "Basic Authentication in Authorization Header",
+				title:       "HTTP Basic Authentication Detected",
 			},
 			"api-key-header": {
 				// Matches various API key header formats:
@@ -76,12 +78,14 @@ func NewHTTPAuthDetector() *HTTPAuthDetector {
 				regex:       regexp.MustCompile(`(?i)\b(?:X-)?(?:API|Api)-?(?:Key|Token):\s*([\w=~@.+/-]{16,})\b`),
 				tokenType:   "api-key-header",
 				description: "API Key in Header",
+				title:       "HTTP API Key Detected",
 			},
 			"basic-auth-url": {
 				// Matches: username:password@ in URLs (http://user:pass@host)
 				regex:       regexp.MustCompile(`(?i)\b(?:https?|ftp)://([a-zA-Z0-9_.-]{3,}):([^@\s]{3,})@`),
 				tokenType:   "basic-auth-url",
 				description: "Basic Authentication in URL",
+				title:       "HTTP Basic Authentication URL Detected",
 			},
 		},
 	}
@@ -123,7 +127,7 @@ func (d *HTTPAuthDetector) createFinding(credential string, pattern *tokenPatter
 		Type:        models.FindingTypeSecret,
 		Fingerprint: models.SaltedFingerprint(credential, ctx.FingerprintSalt),
 		Severity:    "critical",
-		Title:       "HTTP Authentication Credential Detected",
+		Title:       pattern.title,
 		Description: "HTTP authentication credentials in plain text may be exposed in logs, shell history, or configuration files. " +
 			"Use secure credential storage or secret management systems instead.",
 		Message: fmt.Sprintf("A %s was detected in %s.", pattern.description, ctx.FormatSource()),
