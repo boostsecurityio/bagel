@@ -6,15 +6,17 @@ package probe
 import (
 	"context"
 	"os/exec"
+	"runtime"
 	"testing"
 
+	"github.com/boostsecurityio/bagel/pkg/detector"
 	"github.com/boostsecurityio/bagel/pkg/models"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
 func TestGHProbe_Name(t *testing.T) {
-	probe := NewGHProbe(models.ProbeSettings{Enabled: true})
+	probe := NewGHProbe(models.ProbeSettings{Enabled: true}, detector.NewRegistry())
 	assert.Equal(t, "gh", probe.Name())
 }
 
@@ -38,7 +40,7 @@ func TestGHProbe_IsEnabled(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			probe := NewGHProbe(models.ProbeSettings{Enabled: tt.enabled})
+			probe := NewGHProbe(models.ProbeSettings{Enabled: tt.enabled}, detector.NewRegistry())
 			assert.Equal(t, tt.want, probe.IsEnabled())
 		})
 	}
@@ -49,7 +51,7 @@ func TestGHProbe_Execute_GHNotInstalled(t *testing.T) {
 	// t.Setenv automatically restores the original value after the test
 	t.Setenv("PATH", "/nonexistent")
 
-	probe := NewGHProbe(models.ProbeSettings{Enabled: true})
+	probe := NewGHProbe(models.ProbeSettings{Enabled: true}, detector.NewRegistry())
 	findings, err := probe.Execute(context.Background())
 
 	require.NoError(t, err)
@@ -63,7 +65,7 @@ func TestGHProbe_Execute_Integration(t *testing.T) {
 		t.Skip("gh CLI not installed, skipping integration test")
 	}
 
-	probe := NewGHProbe(models.ProbeSettings{Enabled: true})
+	probe := NewGHProbe(models.ProbeSettings{Enabled: true}, detector.NewRegistry())
 	findings, err := probe.Execute(context.Background())
 
 	require.NoError(t, err)
@@ -92,10 +94,40 @@ func TestGHProbe_Execute_ContextCancellation(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel() // Cancel immediately
 
-	probe := NewGHProbe(models.ProbeSettings{Enabled: true})
+	probe := NewGHProbe(models.ProbeSettings{Enabled: true}, detector.NewRegistry())
 	findings, err := probe.Execute(ctx)
 
 	// With a cancelled context, the command should fail and return no findings
 	require.NoError(t, err)
 	assert.Empty(t, findings, "Should return no findings when context is cancelled")
+}
+
+func TestGHProbe_CheckKeychainLeftover_NoCredential(t *testing.T) {
+	if runtime.GOOS != "darwin" {
+		t.Skip("macOS-only test")
+	}
+
+	registry := detector.NewRegistry()
+	registry.Register(detector.NewGitHubPATDetector())
+
+	probe := NewGHProbe(models.ProbeSettings{Enabled: true}, registry)
+	findings := probe.checkKeychainLeftover(context.Background(), false)
+
+	// We can't assert the exact result since it depends on keychain state,
+	// but the method should not panic or return an error
+	_ = findings
+}
+
+func TestGHProbe_CheckKeychainLeftover_SkipsWhenAuthenticated(t *testing.T) {
+	if runtime.GOOS != "darwin" {
+		t.Skip("macOS-only test")
+	}
+
+	registry := detector.NewRegistry()
+	registry.Register(detector.NewGitHubPATDetector())
+
+	probe := NewGHProbe(models.ProbeSettings{Enabled: true}, registry)
+	// When gh is authenticated, leftover keychain creds are expected -- no finding
+	findings := probe.checkKeychainLeftover(context.Background(), true)
+	assert.Empty(t, findings, "Should not report keychain credential when gh is authenticated")
 }
