@@ -16,6 +16,7 @@ require (
 )
 
 require (
+	github.com/charlievieth/fastwalk v1.0.14 // indirect
 	github.com/davecgh/go-spew v1.1.1 // indirect
 	github.com/fatih/color v1.15.0 // indirect
 	github.com/fsnotify/fsnotify v1.9.0 // indirect
