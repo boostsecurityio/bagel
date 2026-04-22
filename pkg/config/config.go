@@ -83,6 +83,31 @@ func setDefaults(v *viper.Viper) {
 	}
 	v.SetDefault("file_index.base_dirs", []string{homeDir})
 
+	// Default exclude paths — directories we don't expect to find user config
+	// or secrets in but that typically contain millions of files. Entries with
+	// no path separator are treated as basenames and pruned at any depth (so
+	// "node_modules" skips every nested node_modules); absolute / ~-prefixed
+	// entries prune that specific directory tree. Entries for platforms other
+	// than the current OS are harmless no-ops.
+	v.SetDefault("file_index.exclude_paths", []string{
+		// Basename prunes (match at any depth)
+		"node_modules",
+		"__pycache__",
+		".tox",
+		// macOS system caches / build output
+		"~/Library/Caches",
+		"~/Library/Logs",
+		"~/Library/Developer/Xcode/DerivedData",
+		"~/.Trash",
+		// XDG cache (Linux, also used by some cross-platform tools on macOS)
+		"~/.cache",
+		// Language / package-manager caches
+		"~/go/pkg/mod",
+		"~/.gradle/caches",
+		"~/.m2/repository",
+		"~/.npm/_cacache",
+	})
+
 	// Cache staleness detection defaults
 	v.SetDefault("file_index.cache.ttl", "30m")
 	v.SetDefault("file_index.cache.sample_size", 50)
