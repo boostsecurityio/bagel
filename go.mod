@@ -3,6 +3,7 @@ module github.com/boostsecurityio/bagel
 go 1.25.1
 
 require (
+	github.com/charlievieth/fastwalk v1.0.14
 	github.com/mattn/go-isatty v0.0.20
 	github.com/olekukonko/tablewriter v1.1.0
 	github.com/rs/zerolog v1.34.0
@@ -16,7 +17,6 @@ require (
 )
 
 require (
-	github.com/charlievieth/fastwalk v1.0.14 // indirect
 	github.com/davecgh/go-spew v1.1.1 // indirect
 	github.com/fatih/color v1.15.0 // indirect
 	github.com/fsnotify/fsnotify v1.9.0 // indirect
