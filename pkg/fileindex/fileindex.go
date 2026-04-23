@@ -127,17 +127,19 @@ func compilePattern(kind PatternType, pat string) patternMatcher {
 				return matched
 			}
 		}
+		// Normalize to the OS separator so filepath.Match / HasSuffix work on
+		// Windows, where filepath.Rel returns paths with '\' but configs use '/'.
+		normalized := filepath.FromSlash(pat)
 		if !strings.ContainsAny(pat, "*?[") {
-			normalized := filepath.FromSlash(pat)
 			return func(_, relPath string) bool {
 				return relPath == normalized || strings.HasSuffix(relPath, normalized)
 			}
 		}
-		if _, err := filepath.Match(pat, ""); err != nil {
+		if _, err := filepath.Match(normalized, ""); err != nil {
 			return func(string, string) bool { return false }
 		}
 		return func(_, relPath string) bool {
-			matched, _ := filepath.Match(pat, relPath)
+			matched, _ := filepath.Match(normalized, relPath)
 			return matched
 		}
 	default:
