@@ -113,6 +113,12 @@ func setDefaults(v *viper.Viper) {
 	v.SetDefault("file_index.cache.sample_size", 50)
 	v.SetDefault("file_index.cache.validate_on_load", true)
 
+	// Resource caps. Zero / empty values preserve current unthrottled behavior;
+	// daemon callers can tune these down.
+	v.SetDefault("resources.file_index_workers", 0)
+	v.SetDefault("resources.max_concurrent_probes", 0)
+	v.SetDefault("resources.probe_timeout", "30s")
+
 	// Common dotfiles and config files
 	v.SetDefault("file_index.patterns", []map[string]interface{}{
 		// SSH

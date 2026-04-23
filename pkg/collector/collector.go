@@ -168,6 +168,7 @@ func (c *Collector) buildFileIndex(ctx context.Context) (*fileindex.FileIndex, e
 		Patterns:         patterns,
 		MaxDepth:         c.config.FileIndex.MaxDepth,
 		FollowSymlinks:   c.config.FileIndex.FollowSymlinks,
+		NumWorkers:       c.config.Resources.FileIndexWorkers,
 		ProgressCallback: progressCallback,
 	}
 
@@ -268,7 +269,12 @@ func (c *Collector) executeProbes(ctx context.Context, fileIdx *fileindex.FileIn
 		)
 	}
 
+	probeTimeout := resolveProbeTimeout(ctx, c.config.Resources.ProbeTimeout)
+
 	g, gCtx := errgroup.WithContext(ctx)
+	if c.config.Resources.MaxConcurrentProbes > 0 {
+		g.SetLimit(c.config.Resources.MaxConcurrentProbes)
+	}
 
 	resultChan := make(chan probe.Result, enabledCount)
 
@@ -287,7 +293,7 @@ func (c *Collector) executeProbes(ctx context.Context, fileIdx *fileindex.FileIn
 		}
 
 		g.Go(func() error {
-			probeCtx, cancel := context.WithTimeout(gCtx, 30*time.Second)
+			probeCtx, cancel := context.WithTimeout(gCtx, probeTimeout)
 			defer cancel()
 
 			findings, err := prb.Execute(probeCtx)
@@ -320,6 +326,31 @@ func (c *Collector) executeProbes(ctx context.Context, fileIdx *fileindex.FileIn
 	}
 
 	return results
+}
+
+// defaultProbeTimeout is used when Resources.ProbeTimeout is empty or invalid.
+const defaultProbeTimeout = 30 * time.Second
+
+// resolveProbeTimeout parses the configured duration. Empty, zero, or invalid
+// values fall back to defaultProbeTimeout; invalid values are logged so the
+// misconfiguration is visible but non-fatal.
+func resolveProbeTimeout(ctx context.Context, raw string) time.Duration {
+	if raw == "" {
+		return defaultProbeTimeout
+	}
+	d, err := time.ParseDuration(raw)
+	if err != nil {
+		log.Ctx(ctx).Warn().
+			Err(err).
+			Str("value", raw).
+			Dur("fallback", defaultProbeTimeout).
+			Msg("Invalid resources.probe_timeout; using default")
+		return defaultProbeTimeout
+	}
+	if d <= 0 {
+		return defaultProbeTimeout
+	}
+	return d
 }
 
 // getHostInfo retrieves information about the current host

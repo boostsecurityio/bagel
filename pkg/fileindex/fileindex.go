@@ -209,6 +209,7 @@ type BuildIndexInput struct {
 	Patterns         []Pattern
 	MaxDepth         int // 0 = unlimited
 	FollowSymlinks   bool
+	NumWorkers       int // fastwalk workers; 0 = library default
 	ProgressCallback func(processed int64)
 }
 
@@ -257,7 +258,7 @@ func BuildIndex(ctx context.Context, input BuildIndexInput) (*FileIndex, error) 
 	// fastwalk's MaxDepth stops recursion when a directory's own depth
 	// equals MaxDepth, so files at that depth aren't enumerated. Our API
 	// means "process files up to and including this depth", so pass +1.
-	cfg := fastwalk.Config{Follow: input.FollowSymlinks}
+	cfg := fastwalk.Config{Follow: input.FollowSymlinks, NumWorkers: input.NumWorkers}
 	if input.MaxDepth > 0 {
 		cfg.MaxDepth = input.MaxDepth + 1
 	}
