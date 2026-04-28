@@ -12,6 +12,16 @@ type Config struct {
 	SeverityMap map[string]string `yaml:"severity_map" mapstructure:"severity_map"`
 	FileIndex   FileIndexConfig   `yaml:"file_index" mapstructure:"file_index"`
 	HostInfo    HostInfoConfig    `yaml:"hostinfo" mapstructure:"hostinfo"`
+	Resources   ResourcesConfig   `yaml:"resources" mapstructure:"resources"`
+}
+
+// ResourcesConfig caps bagel's resource usage so callers running it as a
+// daemon can dial back its CPU / goroutine footprint. Every field left at
+// its zero value preserves the current (unthrottled) behavior.
+type ResourcesConfig struct {
+	FileIndexWorkers    int    `yaml:"file_index_workers" mapstructure:"file_index_workers"`       // fastwalk workers; 0 = library default
+	MaxConcurrentProbes int    `yaml:"max_concurrent_probes" mapstructure:"max_concurrent_probes"` // cap parallel probe execution; 0 = unbounded
+	ProbeTimeout        string `yaml:"probe_timeout" mapstructure:"probe_timeout"`                 // per-probe deadline; empty = 30s
 }
 
 // HostInfoConfig contains configuration for extended host information collection

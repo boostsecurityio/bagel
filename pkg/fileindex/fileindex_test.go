@@ -392,6 +392,37 @@ func TestPatternMatching_ExactMatch(t *testing.T) {
 	assert.Contains(t, gitconfigs, filepath.Join(tmpDir, ".gitconfig"))
 }
 
+func TestPatternMatching_ExactMatch_PathWithSlashes(t *testing.T) {
+	t.Parallel()
+
+	// Exact patterns containing "/" must match the OS-native relPath. On
+	// Windows filepath.Rel returns paths with '\', so the matcher has to
+	// normalize the configured pattern with filepath.FromSlash.
+	tmpDir := t.TempDir()
+
+	target := filepath.Join(tmpDir, ".config", "git", "config")
+	require.NoError(t, os.MkdirAll(filepath.Dir(target), 0755))
+	require.NoError(t, os.WriteFile(target, []byte("content"), 0644))
+
+	patterns := []Pattern{
+		{
+			Name:     "gitconfig_xdg",
+			Patterns: []string{".config/git/config"},
+			Type:     PatternTypeExact,
+		},
+	}
+
+	index, err := BuildIndex(context.Background(), BuildIndexInput{
+		BaseDirs: []string{tmpDir},
+		Patterns: patterns,
+	})
+	require.NoError(t, err)
+
+	matched := index.Get("gitconfig_xdg")
+	assert.Len(t, matched, 1)
+	assert.Contains(t, matched, target)
+}
+
 func TestFileIndex_Concurrency(t *testing.T) {
 	index := NewFileIndex()
 
@@ -708,4 +739,49 @@ func TestBuildIndex_WithExcludePaths(t *testing.T) {
 	assert.Len(t, sshConfigs, 1)
 	assert.Contains(t, sshConfigs, filepath.Join(includedDir, ".ssh", "config"))
 	assert.NotContains(t, sshConfigs, filepath.Join(excludedDir, "proj", ".ssh", "config"))
+}
+
+func TestBuildIndex_WithBasenameExcludes(t *testing.T) {
+	t.Parallel()
+
+	// Bare names in ExcludePaths prune any directory whose basename matches,
+	// at any depth — the common case is "node_modules".
+	tmpDir := t.TempDir()
+
+	for _, dir := range []string{
+		filepath.Join(tmpDir, "proj1"),
+		filepath.Join(tmpDir, "proj1", "node_modules", "pkg"),
+		filepath.Join(tmpDir, "proj2", "sub", "node_modules", "deep"),
+		filepath.Join(tmpDir, "node_modules"),
+		filepath.Join(tmpDir, "keep_me"),
+	} {
+		require.NoError(t, os.MkdirAll(dir, 0755))
+	}
+
+	files := []string{
+		filepath.Join(tmpDir, "proj1", ".env"),                                // keep
+		filepath.Join(tmpDir, "proj1", "node_modules", "pkg", ".env"),         // prune
+		filepath.Join(tmpDir, "proj2", "sub", "node_modules", "deep", ".env"), // prune
+		filepath.Join(tmpDir, "node_modules", ".env"),                         // prune
+		filepath.Join(tmpDir, "keep_me", ".env"),                              // keep
+	}
+	for _, f := range files {
+		require.NoError(t, os.WriteFile(f, []byte("x"), 0644))
+	}
+
+	input := BuildIndexInput{
+		BaseDirs:     []string{tmpDir},
+		ExcludePaths: []string{"node_modules"},
+		Patterns: []Pattern{
+			{Name: "env_files", Patterns: []string{".env"}, Type: PatternTypeExact},
+		},
+	}
+
+	index, err := BuildIndex(context.Background(), input)
+	require.NoError(t, err)
+
+	envs := index.Get("env_files")
+	assert.Len(t, envs, 2)
+	assert.Contains(t, envs, filepath.Join(tmpDir, "proj1", ".env"))
+	assert.Contains(t, envs, filepath.Join(tmpDir, "keep_me", ".env"))
 }

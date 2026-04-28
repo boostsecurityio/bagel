@@ -3,6 +3,7 @@ module github.com/boostsecurityio/bagel
 go 1.25.1
 
 require (
+	github.com/charlievieth/fastwalk v1.0.14
 	github.com/mattn/go-isatty v0.0.20
 	github.com/olekukonko/tablewriter v1.1.0
 	github.com/rs/zerolog v1.34.0

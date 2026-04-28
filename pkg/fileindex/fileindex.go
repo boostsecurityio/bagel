@@ -6,6 +6,7 @@ package fileindex
 import (
 	"context"
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -14,23 +15,20 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/charlievieth/fastwalk"
 	"github.com/rs/zerolog/log"
 )
 
-// FileIndex holds the results of the file system scan
+// FileIndex holds matched file paths grouped by pattern name.
 type FileIndex struct {
 	mu      sync.RWMutex
-	entries map[string][]string // pattern name -> matched file paths
+	entries map[string][]string
 }
 
-// NewFileIndex creates a new empty file index
 func NewFileIndex() *FileIndex {
-	return &FileIndex{
-		entries: make(map[string][]string),
-	}
+	return &FileIndex{entries: make(map[string][]string)}
 }
 
-// Add adds a matched file path for a given pattern name
 func (fi *FileIndex) Add(patternName, filePath string) {
 	fi.mu.Lock()
 	defer fi.mu.Unlock()
@@ -38,28 +36,23 @@ func (fi *FileIndex) Add(patternName, filePath string) {
 	fi.entries[patternName] = append(fi.entries[patternName], filePath)
 }
 
-// Get retrieves all file paths matching a pattern name
 func (fi *FileIndex) Get(patternName string) []string {
 	fi.mu.RLock()
 	defer fi.mu.RUnlock()
 
-	// Return a copy to prevent external modification
 	paths := fi.entries[patternName]
 	if paths == nil {
 		return []string{}
 	}
-
 	result := make([]string, len(paths))
 	copy(result, paths)
 	return result
 }
 
-// GetAll returns all indexed files grouped by pattern name
 func (fi *FileIndex) GetAll() map[string][]string {
 	fi.mu.RLock()
 	defer fi.mu.RUnlock()
 
-	// Return a deep copy
 	result := make(map[string][]string, len(fi.entries))
 	for k, v := range fi.entries {
 		paths := make([]string, len(v))
@@ -69,7 +62,6 @@ func (fi *FileIndex) GetAll() map[string][]string {
 	return result
 }
 
-// TotalFiles returns the total number of indexed files
 func (fi *FileIndex) TotalFiles() int {
 	fi.mu.RLock()
 	defer fi.mu.RUnlock()
@@ -81,73 +73,174 @@ func (fi *FileIndex) TotalFiles() int {
 	return count
 }
 
-// PatternType defines the type of pattern matching to use
 type PatternType string
 
 const (
 	PatternTypeGlob  PatternType = "glob"
 	PatternTypeExact PatternType = "exact"
-	PatternTypeRegex PatternType = "regex" // Reserved for future use
+	PatternTypeRegex PatternType = "regex"
 )
 
-// Pattern defines a file pattern to search for
 type Pattern struct {
-	Name     string      // Unique identifier for this pattern (e.g., "ssh_config")
-	Patterns []string    // List of patterns to match (e.g., [".ssh/config", ".ssh/config.d/*"])
-	Type     PatternType // Type of pattern matching
+	Name     string
+	Patterns []string
+	Type     PatternType
 }
 
-// BuildIndexInput holds the input parameters for building a file index
-type BuildIndexInput struct {
-	BaseDirs         []string              // Base directories to search (e.g., ["$HOME"])
-	ExcludePaths     []string              // Paths to skip entirely (e.g., ["~/repos", "~/.cache"])
-	Patterns         []Pattern             // Patterns to match
-	MaxDepth         int                   // Maximum recursion depth (0 = unlimited)
-	FollowSymlinks   bool                  // Whether to follow symbolic links
-	ProgressCallback func(processed int64) // Optional progress reporter
+type patternMatcher func(basename, relPath string) bool
+
+type compiledPattern struct {
+	name     string
+	matchers []patternMatcher
 }
 
-// BuildIndex recursively scans directories and builds a file index with inline matching
-func BuildIndex(ctx context.Context, input BuildIndexInput) (*FileIndex, error) {
-	index := NewFileIndex()
-
-	// Expand environment variables in base directories
-	expandedDirs := make([]string, 0, len(input.BaseDirs))
-	for _, dir := range input.BaseDirs {
-		expanded := expandHomeDir(dir)
-		expandedDirs = append(expandedDirs, expanded)
+func compilePatterns(patterns []Pattern) []compiledPattern {
+	out := make([]compiledPattern, 0, len(patterns))
+	for _, p := range patterns {
+		cp := compiledPattern{
+			name:     p.Name,
+			matchers: make([]patternMatcher, 0, len(p.Patterns)),
+		}
+		for _, raw := range p.Patterns {
+			cp.matchers = append(cp.matchers, compilePattern(p.Type, raw))
+		}
+		out = append(out, cp)
 	}
+	return out
+}
 
-	// Expand and normalize exclude paths. TrimSpace before expansion so that
-	// entries like " ~/repos " correctly expand the ~ prefix. Empty entries
-	// after trimming are dropped so they cannot accidentally match all paths.
-	expandedExcludes := make([]string, 0, len(input.ExcludePaths))
-	for _, p := range input.ExcludePaths {
+// compilePattern classifies a raw entry into its minimum-cost matcher: exact,
+// basename glob, literal path (suffix match at any depth), or anchored path glob.
+func compilePattern(kind PatternType, pat string) patternMatcher {
+	switch kind {
+	case PatternTypeExact:
+		// Normalize the pattern's separators so a config-supplied path like
+		// ".config/git/config" matches the OS-native relPath on Windows
+		// (filepath.Rel returns paths with '\').
+		normalized := filepath.FromSlash(pat)
+		return func(basename, relPath string) bool {
+			return relPath == normalized || basename == normalized
+		}
+	case PatternTypeGlob:
+		if !strings.Contains(pat, "/") {
+			if _, err := filepath.Match(pat, ""); err != nil {
+				return func(string, string) bool { return false }
+			}
+			return func(basename, _ string) bool {
+				matched, _ := filepath.Match(pat, basename)
+				return matched
+			}
+		}
+		// Normalize to the OS separator so filepath.Match / HasSuffix work on
+		// Windows, where filepath.Rel returns paths with '\' but configs use '/'.
+		normalized := filepath.FromSlash(pat)
+		if !strings.ContainsAny(pat, "*?[") {
+			return func(_, relPath string) bool {
+				return relPath == normalized || strings.HasSuffix(relPath, normalized)
+			}
+		}
+		if _, err := filepath.Match(normalized, ""); err != nil {
+			return func(string, string) bool { return false }
+		}
+		return func(_, relPath string) bool {
+			matched, _ := filepath.Match(normalized, relPath)
+			return matched
+		}
+	default:
+		return func(string, string) bool { return false }
+	}
+}
+
+// excludeSet holds normalized ExcludePaths. Entries classified as bare
+// basenames prune any directory at any depth whose name matches
+// (e.g. "node_modules"); concrete paths prune that specific tree.
+type excludeSet struct {
+	paths     []string
+	basenames map[string]struct{}
+}
+
+func newExcludeSet(entries []string) excludeSet {
+	set := excludeSet{basenames: make(map[string]struct{})}
+	for _, p := range entries {
 		trimmed := strings.TrimSpace(p)
 		if trimmed == "" {
 			continue
 		}
 		expanded := expandHomeDir(trimmed)
-		if expanded != "" {
-			expanded = filepath.Clean(filepath.FromSlash(expanded))
+		if expanded == "" {
+			continue
 		}
-		if expanded != "" {
-			expandedExcludes = append(expandedExcludes, expanded)
+		cleaned := filepath.Clean(filepath.FromSlash(expanded))
+		if cleaned == "" || cleaned == "." {
+			continue
+		}
+		if !filepath.IsAbs(cleaned) && !strings.ContainsRune(cleaned, os.PathSeparator) {
+			set.basenames[cleaned] = struct{}{}
+			continue
+		}
+		set.paths = append(set.paths, cleaned)
+	}
+	return set
+}
+
+func (s excludeSet) excludes(dir string) bool {
+	if len(s.basenames) > 0 {
+		if _, ok := s.basenames[filepath.Base(dir)]; ok {
+			return true
 		}
 	}
-	input.ExcludePaths = expandedExcludes
+	if len(s.paths) == 0 {
+		return false
+	}
+	cleaned := filepath.Clean(dir)
+	for _, excluded := range s.paths {
+		if cleaned == excluded {
+			return true
+		}
+		rel, err := filepath.Rel(excluded, cleaned)
+		if err != nil {
+			continue
+		}
+		// filepath.Rel returns ".." or "../..." iff cleaned is outside excluded.
+		if rel != ".." && !strings.HasPrefix(rel, ".."+string(os.PathSeparator)) {
+			return true
+		}
+	}
+	return false
+}
+
+type BuildIndexInput struct {
+	BaseDirs         []string
+	ExcludePaths     []string
+	Patterns         []Pattern
+	MaxDepth         int // 0 = unlimited
+	FollowSymlinks   bool
+	NumWorkers       int // fastwalk workers; 0 = library default
+	ProgressCallback func(processed int64)
+}
+
+func BuildIndex(ctx context.Context, input BuildIndexInput) (*FileIndex, error) {
+	index := NewFileIndex()
+
+	expandedDirs := make([]string, 0, len(input.BaseDirs))
+	for _, dir := range input.BaseDirs {
+		expandedDirs = append(expandedDirs, expandHomeDir(dir))
+	}
+
+	excludes := newExcludeSet(input.ExcludePaths)
+	compiled := compilePatterns(input.Patterns)
 
 	log.Ctx(ctx).Info().
 		Strs("base_dirs", expandedDirs).
 		Int("pattern_count", len(input.Patterns)).
 		Int("max_depth", input.MaxDepth).
 		Bool("follow_symlinks", input.FollowSymlinks).
+		Int("exclude_path_count", len(excludes.paths)).
+		Int("exclude_basename_count", len(excludes.basenames)).
 		Msg("Building file index")
 
-	// Counter for progress reporting
 	var filesProcessed atomic.Int64
 
-	// Start progress reporter
 	progressDone := make(chan struct{})
 	go func() {
 		ticker := time.NewTicker(100 * time.Millisecond)
@@ -168,17 +261,23 @@ func BuildIndex(ctx context.Context, input BuildIndexInput) (*FileIndex, error) 
 		}
 	}()
 
-	// Discovery — one goroutine per base dir, each runs parallel walkers internally
-	var discoveryWg sync.WaitGroup
-	for _, baseDir := range expandedDirs {
-		discoveryWg.Add(1)
-		go func(dir string) {
-			defer discoveryWg.Done()
-			runDiscovery(ctx, dir, input, index, &filesProcessed)
-		}(baseDir)
+	// fastwalk's MaxDepth stops recursion when a directory's own depth
+	// equals MaxDepth, so files at that depth aren't enumerated. Our API
+	// means "process files up to and including this depth", so pass +1.
+	cfg := fastwalk.Config{Follow: input.FollowSymlinks, NumWorkers: input.NumWorkers}
+	if input.MaxDepth > 0 {
+		cfg.MaxDepth = input.MaxDepth + 1
 	}
 
-	discoveryWg.Wait()
+	var baseDirWg sync.WaitGroup
+	for _, baseDir := range expandedDirs {
+		baseDirWg.Add(1)
+		go func(baseDir string) {
+			defer baseDirWg.Done()
+			walkBaseDir(ctx, baseDir, cfg, compiled, excludes, index, &filesProcessed)
+		}(baseDir)
+	}
+	baseDirWg.Wait()
 	close(progressDone)
 
 	if err := ctx.Err(); err != nil {
@@ -194,15 +293,15 @@ func BuildIndex(ctx context.Context, input BuildIndexInput) (*FileIndex, error) 
 	return index, nil
 }
 
-// runDiscovery validates a base directory and starts file discovery with inline matching
-func runDiscovery(
+func walkBaseDir(
 	ctx context.Context,
 	baseDir string,
-	input BuildIndexInput,
+	cfg fastwalk.Config,
+	patterns []compiledPattern,
+	excludes excludeSet,
 	index *FileIndex,
 	filesProcessed *atomic.Int64,
 ) {
-	// Check if base directory exists and is accessible
 	info, err := os.Stat(baseDir)
 	if err != nil {
 		log.Ctx(ctx).Warn().
@@ -211,7 +310,6 @@ func runDiscovery(
 			Msg("Skipping inaccessible base directory")
 		return
 	}
-
 	if !info.IsDir() {
 		log.Ctx(ctx).Warn().
 			Str("base_dir", baseDir).
@@ -219,203 +317,48 @@ func runDiscovery(
 		return
 	}
 
-	// Create semaphore and WaitGroup for parallel subdirectory traversal (GDU-style)
-	sem := make(chan struct{}, 3*runtime.GOMAXPROCS(0))
-	var wg sync.WaitGroup
-
-	walkDirectory(ctx, baseDir, baseDir, input, input.Patterns, index, filesProcessed, 0, sem, &wg)
-
-	// Wait for all spawned goroutines to finish before returning
-	wg.Wait()
-}
-
-// walkDirectory recursively walks a directory and matches discovered files inline.
-// Subdirectories are traversed in parallel using goroutines gated by the semaphore (GDU-style).
-func walkDirectory(
-	ctx context.Context,
-	baseDir string,
-	currentDir string,
-	input BuildIndexInput,
-	patterns []Pattern,
-	index *FileIndex,
-	filesProcessed *atomic.Int64,
-	depth int,
-	sem chan struct{},
-	wg *sync.WaitGroup,
-) {
-	// Check depth limit
-	if input.MaxDepth > 0 && depth > input.MaxDepth {
-		return
-	}
-
-	// Check if current directory is excluded
-	if isExcludedPath(currentDir, input.ExcludePaths) {
-		log.Ctx(ctx).Debug().
-			Str("dir", currentDir).
-			Msg("Skipping excluded directory")
-		return
-	}
-
-	// Check if context is cancelled
-	select {
-	case <-ctx.Done():
-		return
-	default:
-	}
-
-	// Read directory entries
-	entries, err := os.ReadDir(currentDir)
-	if err != nil {
-		// Permission denied or other errors - log and continue
-		log.Ctx(ctx).Debug().
-			Err(err).
-			Str("dir", currentDir).
-			Msg("Cannot read directory")
-		return
-	}
-
-	for _, entry := range entries {
-		// Check cancellation each iteration for responsive shutdown
-		select {
-		case <-ctx.Done():
-			return
-		default:
+	walkFn := func(path string, d fs.DirEntry, walkErr error) error {
+		if err := ctx.Err(); err != nil {
+			return fmt.Errorf("walk %s: %w", path, err)
 		}
 
-		fullPath := filepath.Join(currentDir, entry.Name())
+		if walkErr != nil {
+			// fastwalk invokes walkFn a second time with a non-nil err when
+			// readDir failed; returning SkipDir would escape as Walk's final
+			// error. Returning nil is correct — fastwalk already skips.
+			log.Ctx(ctx).Debug().
+				Err(walkErr).
+				Str("path", path).
+				Msg("Skipping path due to walk error")
+			return nil
+		}
 
-		// Handle symbolic links
-		if entry.Type()&os.ModeSymlink != 0 {
-			if !input.FollowSymlinks {
-				continue
-			}
-
-			// Resolve symlink
-			resolvedPath, err := filepath.EvalSymlinks(fullPath)
-			if err != nil {
+		if d.IsDir() {
+			if excludes.excludes(path) {
 				log.Ctx(ctx).Debug().
-					Err(err).
-					Str("symlink", fullPath).
-					Msg("Cannot resolve symlink")
-				continue
+					Str("dir", path).
+					Msg("Skipping excluded directory")
+				return filepath.SkipDir
 			}
-
-			// Check if it's a directory
-			resolvedInfo, err := os.Stat(resolvedPath)
-			if err != nil {
-				continue
-			}
-
-			if resolvedInfo.IsDir() {
-				select {
-				case sem <- struct{}{}:
-					wg.Add(1)
-					go func(path string) {
-						defer wg.Done()
-						defer func() { <-sem }()
-						walkDirectory(ctx, baseDir, path, input, patterns, index, filesProcessed, depth+1, sem, wg)
-					}(resolvedPath)
-				case <-ctx.Done():
-					return
-				default:
-					// Semaphore full - recurse inline to avoid deadlock
-					walkDirectory(ctx, baseDir, resolvedPath, input, patterns, index, filesProcessed, depth+1, sem, wg)
-				}
-			} else {
-				// Match symlinked file inline
-				matchFile(ctx, baseDir, resolvedPath, patterns, index)
-				filesProcessed.Add(1)
-			}
-			continue
+			return nil
 		}
 
-		// Handle directories
-		if entry.IsDir() {
-			select {
-			case sem <- struct{}{}:
-				wg.Add(1)
-				go func(path string) {
-					defer wg.Done()
-					defer func() { <-sem }()
-					walkDirectory(ctx, baseDir, path, input, patterns, index, filesProcessed, depth+1, sem, wg)
-				}(fullPath)
-			case <-ctx.Done():
-				return
-			default:
-				// Semaphore full - recurse inline to avoid deadlock
-				walkDirectory(ctx, baseDir, fullPath, input, patterns, index, filesProcessed, depth+1, sem, wg)
-			}
-			continue
-		}
-
-		// Match file inline
-		matchFile(ctx, baseDir, fullPath, patterns, index)
+		matchFile(ctx, baseDir, path, patterns, index)
 		filesProcessed.Add(1)
+		return nil
+	}
+
+	if err := fastwalk.Walk(&cfg, baseDir, walkFn); err != nil {
+		if ctx.Err() == nil {
+			log.Ctx(ctx).Warn().
+				Err(err).
+				Str("base_dir", baseDir).
+				Msg("fastwalk returned error")
+		}
 	}
 }
 
-// isExcludedPath reports whether path should be skipped during file index building.
-// A path is excluded if it equals any entry in excludePaths, or is a descendant of one.
-// excludePaths must already be expanded and normalized (no ~ or $HOME variables).
-// filepath.Rel is used for the containment check so that root or volume-root excludes
-// (e.g. "/" on Unix) are handled correctly.
-func isExcludedPath(path string, excludePaths []string) bool {
-	cleanedPath := filepath.Clean(path)
-	for _, excluded := range excludePaths {
-		trimmed := strings.TrimSpace(excluded)
-		if trimmed == "" {
-			continue
-		}
-		cleanedExcluded := filepath.Clean(trimmed)
-		if cleanedPath == cleanedExcluded {
-			return true
-		}
-		rel, err := filepath.Rel(cleanedExcluded, cleanedPath)
-		if err != nil {
-			continue
-		}
-		// rel starts with ".." only when cleanedPath is outside cleanedExcluded
-		if rel != ".." && !strings.HasPrefix(rel, ".."+string(os.PathSeparator)) {
-			return true
-		}
-	}
-	return false
-}
-
-// expandHomeDir expands $HOME, %USERPROFILE%, and ~ to the user's home directory.
-// Falls back to os.ExpandEnv for other environment variables.
-func expandHomeDir(path string) string {
-	// Handle ~ prefix
-	if strings.HasPrefix(path, "~") {
-		home, err := os.UserHomeDir()
-		if err == nil {
-			path = strings.Replace(path, "~", home, 1)
-		}
-	}
-
-	// Handle $HOME (Unix) - os.ExpandEnv won't work on Windows
-	if strings.Contains(path, "$HOME") {
-		home, err := os.UserHomeDir()
-		if err == nil {
-			path = strings.ReplaceAll(path, "$HOME", home)
-		}
-	}
-
-	// Handle %USERPROFILE% (Windows) - os.ExpandEnv handles this, but be explicit
-	if runtime.GOOS == "windows" && strings.Contains(path, "%USERPROFILE%") {
-		home, err := os.UserHomeDir()
-		if err == nil {
-			path = strings.ReplaceAll(path, "%USERPROFILE%", home)
-		}
-	}
-
-	// Expand remaining environment variables
-	return os.ExpandEnv(path)
-}
-
-// matchFile checks if a file matches any of the patterns and adds it to the index
-func matchFile(ctx context.Context, baseDir string, filePath string, patterns []Pattern, index *FileIndex) {
-	// Get relative path from base directory
+func matchFile(ctx context.Context, baseDir string, filePath string, patterns []compiledPattern, index *FileIndex) {
 	relPath, err := filepath.Rel(baseDir, filePath)
 	if err != nil {
 		log.Ctx(ctx).Debug().
@@ -425,57 +368,40 @@ func matchFile(ctx context.Context, baseDir string, filePath string, patterns []
 			Msg("Cannot get relative path")
 		return
 	}
+	basename := filepath.Base(filePath)
 
-	// Check against all patterns
 	for _, pattern := range patterns {
-		for _, pat := range pattern.Patterns {
-			matched := false
-
-			switch pattern.Type {
-			case PatternTypeGlob:
-				// Use filepath.Match for glob patterns
-				matched, err = filepath.Match(pat, filepath.Base(filePath))
-				if err != nil {
-					log.Ctx(ctx).Debug().
-						Err(err).
-						Str("pattern", pat).
-						Msg("Invalid glob pattern")
-					continue
-				}
-
-				// Also check if the relative path matches the pattern exactly
-				if !matched {
-					matched, _ = filepath.Match(pat, relPath)
-				}
-
-				// For patterns with path separators, check if relPath ends with the pattern
-				if !matched && strings.Contains(pat, "/") {
-					// Convert to OS-specific path separator
-					normalizedPattern := filepath.FromSlash(pat)
-					normalizedRelPath := filepath.FromSlash(relPath)
-
-					// Check if the relative path ends with the pattern
-					if strings.HasSuffix(normalizedRelPath, normalizedPattern) {
-						matched = true
-					} else {
-						// Also try direct filepath.Match in case it's a glob with wildcards
-						matched, _ = filepath.Match(normalizedPattern, normalizedRelPath)
-					}
-				}
-
-			case PatternTypeExact:
-				// Exact match against relative path or basename
-				matched = relPath == pat || filepath.Base(filePath) == pat
-			}
-
-			if matched {
-				index.Add(pattern.Name, filePath)
+		for _, m := range pattern.matchers {
+			if m(basename, relPath) {
+				index.Add(pattern.name, filePath)
 				log.Ctx(ctx).Debug().
-					Str("pattern", pattern.Name).
+					Str("pattern", pattern.name).
 					Str("file", filePath).
 					Msg("File matched pattern")
-				break // Don't match the same file multiple times for the same pattern
+				break
 			}
 		}
 	}
+}
+
+func expandHomeDir(path string) string {
+	if strings.HasPrefix(path, "~") {
+		home, err := os.UserHomeDir()
+		if err == nil {
+			path = strings.Replace(path, "~", home, 1)
+		}
+	}
+	if strings.Contains(path, "$HOME") {
+		home, err := os.UserHomeDir()
+		if err == nil {
+			path = strings.ReplaceAll(path, "$HOME", home)
+		}
+	}
+	if runtime.GOOS == "windows" && strings.Contains(path, "%USERPROFILE%") {
+		home, err := os.UserHomeDir()
+		if err == nil {
+			path = strings.ReplaceAll(path, "%USERPROFILE%", home)
+		}
+	}
+	return os.ExpandEnv(path)
 }
