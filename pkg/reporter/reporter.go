@@ -13,7 +13,37 @@ import (
 
 	"github.com/boostsecurityio/bagel/pkg/models"
 	"github.com/olekukonko/tablewriter"
+	"github.com/olekukonko/tablewriter/tw"
+	"golang.org/x/term"
 )
+
+// defaultTableWidth is used when stdout is not a TTY (e.g. piped to a file).
+const defaultTableWidth = 120
+
+// terminalWidth returns the width of the terminal backing w, or defaultTableWidth
+// if w is not a TTY or the width cannot be determined.
+func terminalWidth(w io.Writer) int {
+	if f, ok := w.(*os.File); ok {
+		if width, _, err := term.GetSize(int(f.Fd())); err == nil && width > 0 {
+			return width
+		}
+	}
+	return defaultTableWidth
+}
+
+// tableConfig builds the shared tablewriter config that wraps long cell content
+// so the rendered table fits within the given terminal width.
+func tableConfig(terminalWidth int) tablewriter.Config {
+	return tablewriter.Config{
+		MaxWidth: terminalWidth,
+		Header: tw.CellConfig{
+			Formatting: tw.CellFormatting{AutoWrap: tw.WrapNormal},
+		},
+		Row: tw.CellConfig{
+			Formatting: tw.CellFormatting{AutoWrap: tw.WrapNormal},
+		},
+	}
+}
 
 // Format represents the output format
 type Format string
@@ -67,9 +97,11 @@ func (r *Reporter) reportJSON(result *models.ScanResult) error {
 
 // reportTable outputs results in a human-readable table format using tablewriter
 func (r *Reporter) reportTable(result *models.ScanResult) error {
+	width := terminalWidth(r.output)
+	cfg := tableConfig(width)
 
 	// Host information table
-	hostTable := tablewriter.NewWriter(r.output)
+	hostTable := tablewriter.NewTable(r.output, tablewriter.WithConfig(cfg))
 	hostTable.Header("Property", "Value")
 	if err := hostTable.Append("Hostname", result.Host.Hostname); err != nil {
 		return fmt.Errorf("failed to append hostname: %w", err)
@@ -97,7 +129,7 @@ func (r *Reporter) reportTable(result *models.ScanResult) error {
 
 	// Extended system information
 	if result.Host.System != nil {
-		if err := r.renderSystemInfo(result.Host.System); err != nil {
+		if err := r.renderSystemInfo(result.Host.System, cfg); err != nil {
 			return fmt.Errorf("render system info: %w", err)
 		}
 		fmt.Fprintf(r.output, "\n")
@@ -112,7 +144,7 @@ func (r *Reporter) reportTable(result *models.ScanResult) error {
 	fmt.Fprintf(r.output, "Findings: %d\n\n", len(result.Findings))
 
 	// Findings table
-	findingsTable := tablewriter.NewWriter(r.output)
+	findingsTable := tablewriter.NewTable(r.output, tablewriter.WithConfig(cfg))
 	findingsTable.Header("#", "Severity", "Probe", "Title", "Message", "Location")
 
 	for i, finding := range result.Findings {
@@ -231,10 +263,10 @@ func formatLocationFromFinding(finding models.Finding) string {
 }
 
 // renderSystemInfo displays extended system information in table format
-func (r *Reporter) renderSystemInfo(sys *models.SystemInfo) error {
+func (r *Reporter) renderSystemInfo(sys *models.SystemInfo, cfg tablewriter.Config) error {
 	fmt.Fprintf(r.output, "System Information:\n")
 
-	sysTable := tablewriter.NewWriter(r.output)
+	sysTable := tablewriter.NewTable(r.output, tablewriter.WithConfig(cfg))
 	sysTable.Header("Property", "Value")
 
 	if sys.OSVersion != "" {
