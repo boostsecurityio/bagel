@@ -114,8 +114,12 @@ func compilePatterns(patterns []Pattern) []compiledPattern {
 func compilePattern(kind PatternType, pat string) patternMatcher {
 	switch kind {
 	case PatternTypeExact:
+		// Normalize the pattern's separators so a config-supplied path like
+		// ".config/git/config" matches the OS-native relPath on Windows
+		// (filepath.Rel returns paths with '\').
+		normalized := filepath.FromSlash(pat)
 		return func(basename, relPath string) bool {
-			return relPath == pat || basename == pat
+			return relPath == normalized || basename == normalized
 		}
 	case PatternTypeGlob:
 		if !strings.Contains(pat, "/") {

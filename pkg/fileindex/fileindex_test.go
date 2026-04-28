@@ -392,6 +392,37 @@ func TestPatternMatching_ExactMatch(t *testing.T) {
 	assert.Contains(t, gitconfigs, filepath.Join(tmpDir, ".gitconfig"))
 }
 
+func TestPatternMatching_ExactMatch_PathWithSlashes(t *testing.T) {
+	t.Parallel()
+
+	// Exact patterns containing "/" must match the OS-native relPath. On
+	// Windows filepath.Rel returns paths with '\', so the matcher has to
+	// normalize the configured pattern with filepath.FromSlash.
+	tmpDir := t.TempDir()
+
+	target := filepath.Join(tmpDir, ".config", "git", "config")
+	require.NoError(t, os.MkdirAll(filepath.Dir(target), 0755))
+	require.NoError(t, os.WriteFile(target, []byte("content"), 0644))
+
+	patterns := []Pattern{
+		{
+			Name:     "gitconfig_xdg",
+			Patterns: []string{".config/git/config"},
+			Type:     PatternTypeExact,
+		},
+	}
+
+	index, err := BuildIndex(context.Background(), BuildIndexInput{
+		BaseDirs: []string{tmpDir},
+		Patterns: patterns,
+	})
+	require.NoError(t, err)
+
+	matched := index.Get("gitconfig_xdg")
+	assert.Len(t, matched, 1)
+	assert.Contains(t, matched, target)
+}
+
 func TestFileIndex_Concurrency(t *testing.T) {
 	index := NewFileIndex()
 
