@@ -4,6 +4,7 @@
 package probe
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"os"
@@ -97,7 +98,8 @@ func (p *PyPIProbe) processPyPIRC(ctx context.Context, filePath string) []models
 	findings := make([]models.Finding, 0, 4)
 	configMap := parsePyPIRC(string(content))
 	findings = append(findings, p.checkPyPIConfig(filePath, configMap)...)
-	findings = append(findings, scanFileLines(ctx, filePath, p.Name(), p.detectorRegistry, 0)...)
+	// Scan from the in-memory bytes — no second open of the same file.
+	findings = append(findings, scanReaderLines(ctx, "file:"+filePath, bytes.NewReader(content), p.Name(), p.detectorRegistry, 0)...)
 	return findings
 }
 
@@ -115,7 +117,7 @@ func (p *PyPIProbe) processPipConfig(ctx context.Context, filePath string) []mod
 	findings := make([]models.Finding, 0, 4)
 	configMap := parsePyPIRC(string(content))
 	findings = append(findings, p.checkPipConfig(filePath, configMap)...)
-	findings = append(findings, scanFileLines(ctx, filePath, p.Name(), p.detectorRegistry, 0)...)
+	findings = append(findings, scanReaderLines(ctx, "file:"+filePath, bytes.NewReader(content), p.Name(), p.detectorRegistry, 0)...)
 	return findings
 }
 

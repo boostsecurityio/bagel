@@ -194,9 +194,9 @@ func (p *JetBrainsProbe) processWorkspaceFile(ctx context.Context, workspacePath
 
 // xmlValueLine returns the 1-based line where value first appears in the raw
 // XML source, or 0 if not found. encoding/xml unescapes attribute values on
-// unmarshal, so a parsed value containing the original characters '&', '<',
-// '>', '"', or '\” won't substring-match the on-disk representation; in
-// those cases we omit the line number rather than guess.
+// unmarshal, so a parsed value containing the original characters &, <, >,
+// ", or ' won't substring-match the on-disk representation; in those cases
+// we omit the line number rather than guess.
 func xmlValueLine(content []byte, value string) int {
 	if value == "" || strings.ContainsAny(value, "&<>\"'") {
 		return 0

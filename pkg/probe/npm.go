@@ -4,6 +4,7 @@
 package probe
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"os"
@@ -102,7 +103,9 @@ func (p *NPMProbe) processConfigFile(ctx context.Context, filePath string) []mod
 
 	configMap := parseNPMConfig(string(content))
 	findings = append(findings, p.checkNPMConfig(filePath, configMap)...)
-	findings = append(findings, scanFileLines(ctx, filePath, p.Name(), p.detectorRegistry, 0)...)
+	// Scan from the in-memory bytes we just read for parsing — avoids
+	// reopening the file a second time.
+	findings = append(findings, scanReaderLines(ctx, "file:"+filePath, bytes.NewReader(content), p.Name(), p.detectorRegistry, 0)...)
 
 	return findings
 }

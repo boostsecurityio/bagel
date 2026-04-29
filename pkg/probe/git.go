@@ -390,7 +390,6 @@ func (p *GitProbe) scanGitConfigForSecrets(config map[string]string) []models.Fi
 	findings := make([]models.Finding, 0, len(config))
 
 	for configKey, configValue := range config {
-		// Run detectors on config values
 		detCtx := models.NewDetectionContext(models.NewDetectionContextInput{
 			Source:    "git-config:" + configKey,
 			ProbeName: p.Name(),
