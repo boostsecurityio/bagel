@@ -105,11 +105,18 @@ func TestJetBrainsProbe_ProcessWorkspaceFile(t *testing.T) {
 	// Should find GitHub PAT and NPM token
 	assert.GreaterOrEqual(t, len(findings), 2)
 
-	// Verify metadata includes config_name and env_var
+	// Verify metadata includes config_name, env_var, and the line number
+	// resolved from the value's offset in the raw XML.
 	for _, finding := range findings {
 		assert.Equal(t, "go build my_project", finding.Metadata["config_name"])
-		if finding.ID == "github-token-classic-pat" {
+		switch finding.ID {
+		case "github-token-classic-pat":
 			assert.Equal(t, "GH_TOKEN", finding.Metadata["env_var"])
+			// <env ...> is on line 9 of the fixture above.
+			assert.Equal(t, 9, finding.Metadata["line_number"])
+		case "npm-token-npm-auth-token":
+			// <parameters value="..."/> is on line 7.
+			assert.Equal(t, 7, finding.Metadata["line_number"])
 		}
 	}
 }

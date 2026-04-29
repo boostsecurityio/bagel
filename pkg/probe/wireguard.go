@@ -5,7 +5,6 @@ package probe
 
 import (
 	"context"
-	"os"
 	"path/filepath"
 	"runtime"
 
@@ -107,21 +106,9 @@ func (p *WireGuardProbe) findSystemConfigs(ctx context.Context) []string {
 	return configs
 }
 
-// processConfigFile reads a WireGuard config and scans for private keys
+// processConfigFile reads a WireGuard config and scans for private keys.
+// WireGuard configs are INI-format with PrivateKey on a single line, so
+// per-line scanning attaches a line number to each finding.
 func (p *WireGuardProbe) processConfigFile(ctx context.Context, filePath string) []models.Finding {
-	content, err := os.ReadFile(filePath)
-	if err != nil {
-		log.Ctx(ctx).Debug().
-			Err(err).
-			Str("file", filePath).
-			Msg("Cannot read WireGuard config file")
-		return nil
-	}
-
-	detCtx := models.NewDetectionContext(models.NewDetectionContextInput{
-		Source:    "file:" + filePath,
-		ProbeName: p.Name(),
-	})
-
-	return p.detectorRegistry.DetectAll(string(content), detCtx)
+	return scanFileLines(ctx, filePath, p.Name(), p.detectorRegistry, 0)
 }

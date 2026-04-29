@@ -4,6 +4,7 @@
 package probe
 
 import (
+	"bytes"
 	"context"
 	"encoding/xml"
 	"io"
@@ -168,9 +169,10 @@ func (p *JetBrainsProbe) processWorkspaceFile(ctx context.Context, workspacePath
 					Source:    "file:" + workspacePath,
 					ProbeName: p.Name(),
 				}).WithExtra("config_name", configuration.Name)
-
-				detectedSecrets := p.detectorRegistry.DetectAll(args, detCtx)
-				findings = append(findings, detectedSecrets...)
+				if line := xmlValueLine(data, args); line > 0 {
+					detCtx = detCtx.WithLineNumber(line)
+				}
+				findings = append(findings, p.detectorRegistry.DetectAll(args, detCtx)...)
 			}
 
 			env := configuration.Environment.Variables
@@ -179,12 +181,29 @@ func (p *JetBrainsProbe) processWorkspaceFile(ctx context.Context, workspacePath
 					Source:    "file:" + workspacePath,
 					ProbeName: p.Name(),
 				}).WithEnvVarName(envVar.Name).WithExtra("config_name", configuration.Name)
-
-				detectedSecrets := p.detectorRegistry.DetectAll(envVar.Value, detCtx)
-				findings = append(findings, detectedSecrets...)
+				if line := xmlValueLine(data, envVar.Value); line > 0 {
+					detCtx = detCtx.WithLineNumber(line)
+				}
+				findings = append(findings, p.detectorRegistry.DetectAll(envVar.Value, detCtx)...)
 			}
 		}
 	}
 
 	return findings
+}
+
+// xmlValueLine returns the 1-based line where value first appears in the raw
+// XML source, or 0 if not found. encoding/xml unescapes attribute values on
+// unmarshal, so a parsed value containing the original characters &, <, >,
+// ", or ' won't substring-match the on-disk representation; in those cases
+// we omit the line number rather than guess.
+func xmlValueLine(content []byte, value string) int {
+	if value == "" || strings.ContainsAny(value, "&<>\"'") {
+		return 0
+	}
+	idx := bytes.Index(content, []byte(value))
+	if idx < 0 {
+		return 0
+	}
+	return bytes.Count(content[:idx], []byte("\n")) + 1
 }

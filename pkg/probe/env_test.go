@@ -101,6 +101,29 @@ NPM_TOKEN=npm_abcdefghijklmnopqrstuvwxyz1234567890`
 	assert.True(t, findingIDs["npm-token-npm-auth-token"], "Should detect NPM token")
 }
 
+func TestEnvProbe_ProcessEnvFile_AttachesLineNumber(t *testing.T) {
+	tmpDir := t.TempDir()
+	ctx := context.Background()
+
+	// The NPM token sits on line 4 (1-based): two preceding entries plus a
+	// blank line. Finding metadata must reflect that so the reporter can
+	// render a "path:line" location.
+	envPath := filepath.Join(tmpDir, ".env")
+	envContent := "NODE_ENV=production\n" +
+		"DB_HOST=localhost\n" +
+		"\n" +
+		"NPM_TOKEN=npm_abcdefghijklmnopqrstuvwxyz1234567890\n"
+	require.NoError(t, os.WriteFile(envPath, []byte(envContent), 0644))
+
+	registry := detector.NewRegistry()
+	registry.Register(detector.NewNPMTokenDetector())
+	probe := NewEnvProbe(models.ProbeSettings{Enabled: true}, registry)
+
+	findings := probe.processEnvFile(ctx, envPath)
+	require.Len(t, findings, 1)
+	assert.Equal(t, 4, findings[0].Metadata["line_number"])
+}
+
 func TestEnvProbe_Execute_WithFileIndex(t *testing.T) {
 	tmpDir := t.TempDir()
 	ctx := context.Background()

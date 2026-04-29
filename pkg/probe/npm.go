@@ -4,6 +4,7 @@
 package probe
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"os"
@@ -84,11 +85,13 @@ func (p *NPMProbe) Execute(ctx context.Context) ([]models.Finding, error) {
 	return findings, nil
 }
 
-// processConfigFile reads and analyzes a single NPM/Yarn config file
+// processConfigFile reads and analyzes a single NPM/Yarn config file. The
+// whole-file read drives misconfiguration parsing; secret detection runs
+// line-by-line so findings carry a line number (.npmrc and .yarnrc are
+// KEY=VALUE per line).
 func (p *NPMProbe) processConfigFile(ctx context.Context, filePath string) []models.Finding {
 	findings := make([]models.Finding, 0, 4)
 
-	// Read file contents
 	content, err := os.ReadFile(filePath)
 	if err != nil {
 		log.Ctx(ctx).Debug().
@@ -98,19 +101,11 @@ func (p *NPMProbe) processConfigFile(ctx context.Context, filePath string) []mod
 		return findings
 	}
 
-	contentStr := string(content)
-
-	// Parse config and check for security issues
-	configMap := parseNPMConfig(contentStr)
+	configMap := parseNPMConfig(string(content))
 	findings = append(findings, p.checkNPMConfig(filePath, configMap)...)
-
-	// Scan for embedded secrets using detector registry
-	detCtx := models.NewDetectionContext(models.NewDetectionContextInput{
-		Source:    "file:" + filePath,
-		ProbeName: p.Name(),
-	})
-	detectedSecrets := p.detectorRegistry.DetectAll(contentStr, detCtx)
-	findings = append(findings, detectedSecrets...)
+	// Scan from the in-memory bytes we just read for parsing — avoids
+	// reopening the file a second time.
+	findings = append(findings, scanReaderLines(ctx, "file:"+filePath, bytes.NewReader(content), p.Name(), p.detectorRegistry, 0)...)
 
 	return findings
 }

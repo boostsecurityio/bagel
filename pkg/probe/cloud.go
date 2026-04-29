@@ -149,29 +149,10 @@ func (p *CloudProbe) checkK8sServiceAccountToken(ctx context.Context) []models.F
 	}
 }
 
-// processCloudFile reads and analyzes a cloud credential file
+// processCloudFile reads and analyzes a cloud credential file. Cloud
+// credentials are either INI (.aws/credentials) or JSON service-account files
+// with private_key kept on a single line via \n escapes — per-line scanning
+// works for both and lets findings carry a line number.
 func (p *CloudProbe) processCloudFile(ctx context.Context, filePath string) []models.Finding {
-	findings := make([]models.Finding, 0, 4)
-
-	// Read file
-	content, err := os.ReadFile(filePath)
-	if err != nil {
-		log.Ctx(ctx).Debug().
-			Err(err).
-			Str("file", filePath).
-			Msg("Cannot read cloud credential file")
-		return findings
-	}
-
-	contentStr := string(content)
-
-	// Use detector registry to scan for cloud credentials
-	detCtx := models.NewDetectionContext(models.NewDetectionContextInput{
-		Source:    "file:" + filePath,
-		ProbeName: p.Name(),
-	})
-	detectedCreds := p.detectorRegistry.DetectAll(contentStr, detCtx)
-	findings = append(findings, detectedCreds...)
-
-	return findings
+	return scanFileLines(ctx, filePath, p.Name(), p.detectorRegistry, 0)
 }

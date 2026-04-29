@@ -131,10 +131,11 @@ func (p *AICliProbe) Execute(ctx context.Context) ([]models.Finding, error) {
 	return findings, nil
 }
 
-// processFile reads and analyzes an AI CLI adjacent file
+// processFile reads and analyzes an AI CLI adjacent file. JSONL chat logs are
+// line-per-message and credential JSON files keep secret values (e.g.
+// service-account private_key) on a single line via \n escape sequences, so
+// per-line scanning is sufficient and gives us line numbers.
 func (p *AICliProbe) processFile(ctx context.Context, filePath string) []models.Finding {
-	findings := make([]models.Finding, 0, 4)
-
 	// Check file size before reading to avoid loading large chat logs into memory.
 	// Credential files are small; oversized files are almost certainly conversation
 	// history where a full regex scan would be unbounded and slow.
@@ -144,7 +145,7 @@ func (p *AICliProbe) processFile(ctx context.Context, filePath string) []models.
 			Err(err).
 			Str("file", filePath).
 			Msg("Cannot stat AI CLI file")
-		return findings
+		return nil
 	}
 	if info.Size() > p.maxFileSize {
 		log.Ctx(ctx).Debug().
@@ -152,29 +153,10 @@ func (p *AICliProbe) processFile(ctx context.Context, filePath string) []models.
 			Int64("size_bytes", info.Size()).
 			Int64("max_size_bytes", p.maxFileSize).
 			Msg("Skipping oversized AI CLI file")
-		return findings
+		return nil
 	}
 
-	// Read file
-	content, err := os.ReadFile(filePath)
-	if err != nil {
-		log.Ctx(ctx).Debug().
-			Err(err).
-			Str("file", filePath).
-			Msg("Cannot read AI CLI file")
-		return findings
-	}
-
-	contentStr := string(content)
-
-	// Use detector registry to scan for AI CLI credentials
-	// and leaked secrets / credentials in chat logs
-	detCtx := models.NewDetectionContext(models.NewDetectionContextInput{
-		Source:    "file:" + filePath,
-		ProbeName: p.Name(),
-	})
-	detectedCreds := p.detectorRegistry.DetectAll(contentStr, detCtx)
-	findings = append(findings, detectedCreds...)
-
-	return findings
+	// JSONL chat lines (model responses, large prompts) can exceed bufio's
+	// default 64KB. Cap at maxFileSize since the whole file already fits.
+	return scanFileLines(ctx, filePath, p.Name(), p.detectorRegistry, int(p.maxFileSize)+1)
 }
