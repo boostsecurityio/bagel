@@ -82,7 +82,8 @@ func (p *PyPIProbe) Execute(ctx context.Context) ([]models.Finding, error) {
 	return findings, nil
 }
 
-// processPyPIRC reads and analyzes a .pypirc file
+// processPyPIRC reads and analyzes a .pypirc file. Whole-file read drives
+// the misconfig parser; per-line scan attaches line numbers to findings.
 func (p *PyPIProbe) processPyPIRC(ctx context.Context, filePath string) []models.Finding {
 	content, err := os.ReadFile(filePath)
 	if err != nil {
@@ -93,24 +94,14 @@ func (p *PyPIProbe) processPyPIRC(ctx context.Context, filePath string) []models
 		return nil
 	}
 
-	contentStr := string(content)
 	findings := make([]models.Finding, 0, 4)
-
-	// Check for misconfigurations
-	configMap := parsePyPIRC(contentStr)
+	configMap := parsePyPIRC(string(content))
 	findings = append(findings, p.checkPyPIConfig(filePath, configMap)...)
-
-	// Scan for embedded secrets using detector registry
-	detCtx := models.NewDetectionContext(models.NewDetectionContextInput{
-		Source:    "file:" + filePath,
-		ProbeName: p.Name(),
-	})
-	findings = append(findings, p.detectorRegistry.DetectAll(contentStr, detCtx)...)
-
+	findings = append(findings, scanFileLines(ctx, filePath, p.Name(), p.detectorRegistry, 0)...)
 	return findings
 }
 
-// processPipConfig reads and analyzes a pip.conf/pip.ini file
+// processPipConfig reads and analyzes a pip.conf/pip.ini file.
 func (p *PyPIProbe) processPipConfig(ctx context.Context, filePath string) []models.Finding {
 	content, err := os.ReadFile(filePath)
 	if err != nil {
@@ -121,20 +112,10 @@ func (p *PyPIProbe) processPipConfig(ctx context.Context, filePath string) []mod
 		return nil
 	}
 
-	contentStr := string(content)
 	findings := make([]models.Finding, 0, 4)
-
-	// Check for index URLs with embedded credentials
-	configMap := parsePyPIRC(contentStr)
+	configMap := parsePyPIRC(string(content))
 	findings = append(findings, p.checkPipConfig(filePath, configMap)...)
-
-	// Scan for embedded secrets
-	detCtx := models.NewDetectionContext(models.NewDetectionContextInput{
-		Source:    "file:" + filePath,
-		ProbeName: p.Name(),
-	})
-	findings = append(findings, p.detectorRegistry.DetectAll(contentStr, detCtx)...)
-
+	findings = append(findings, scanFileLines(ctx, filePath, p.Name(), p.detectorRegistry, 0)...)
 	return findings
 }
 

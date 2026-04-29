@@ -133,30 +133,10 @@ func (p *EnvProbe) scanShellConfigFiles(ctx context.Context) []models.Finding {
 }
 
 // processShellConfigFile reads and analyzes a shell configuration file
+// (.bashrc, .zshrc, .profile). Shell configs are line-oriented (export
+// VAR=value), so per-line scanning attaches a line number to each finding.
 func (p *EnvProbe) processShellConfigFile(ctx context.Context, filePath string) []models.Finding {
-	findings := make([]models.Finding, 0, 4)
-
-	// Read file contents
-	content, err := os.ReadFile(filePath)
-	if err != nil {
-		log.Ctx(ctx).Debug().
-			Err(err).
-			Str("file", filePath).
-			Msg("Cannot read shell config file")
-		return findings
-	}
-
-	contentStr := string(content)
-
-	// Scan entire file content for secrets using detector registry
-	detCtx := models.NewDetectionContext(models.NewDetectionContextInput{
-		Source:    "file:" + filePath,
-		ProbeName: p.Name(),
-	})
-	detectedSecrets := p.detectorRegistry.DetectAll(contentStr, detCtx)
-	findings = append(findings, detectedSecrets...)
-
-	return findings
+	return scanFileLines(ctx, filePath, p.Name(), p.detectorRegistry, 0)
 }
 
 // scanEnvFiles scans .env files for secrets and configuration issues
@@ -177,29 +157,9 @@ func (p *EnvProbe) scanEnvFiles(ctx context.Context) []models.Finding {
 	return findings
 }
 
-// processEnvFile reads and analyzes a .env file
+// processEnvFile reads and analyzes a .env file. .env is line-oriented
+// (KEY=VALUE per line) so per-line scanning attaches a line number to every
+// finding without losing detection coverage.
 func (p *EnvProbe) processEnvFile(ctx context.Context, filePath string) []models.Finding {
-	findings := make([]models.Finding, 0, 4)
-
-	// Read file contents
-	content, err := os.ReadFile(filePath)
-	if err != nil {
-		log.Ctx(ctx).Debug().
-			Err(err).
-			Str("file", filePath).
-			Msg("Cannot read .env file")
-		return findings
-	}
-
-	contentStr := string(content)
-
-	// Scan entire file content for secrets using detector registry
-	detCtx := models.NewDetectionContext(models.NewDetectionContextInput{
-		Source:    "file:" + filePath,
-		ProbeName: p.Name(),
-	})
-	detectedSecrets := p.detectorRegistry.DetectAll(contentStr, detCtx)
-	findings = append(findings, detectedSecrets...)
-
-	return findings
+	return scanFileLines(ctx, filePath, p.Name(), p.detectorRegistry, 0)
 }

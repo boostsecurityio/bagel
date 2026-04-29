@@ -94,23 +94,9 @@ func (p *GitProbe) scanCredentialFiles(ctx context.Context) []models.Finding {
 
 	var findings []models.Finding
 	for _, filePath := range credFiles {
-		content, err := os.ReadFile(filePath)
-		if err != nil {
-			log.Ctx(ctx).Debug().
-				Err(err).
-				Str("file", filePath).
-				Msg("Cannot read git credential file")
-			continue
-		}
-
-		contentStr := string(content)
-
-		// Scan contents through detector registry (catches URLs with embedded tokens)
-		detCtx := models.NewDetectionContext(models.NewDetectionContextInput{
-			Source:    "file:" + filePath,
-			ProbeName: p.Name(),
-		})
-		findings = append(findings, p.detectorRegistry.DetectAll(contentStr, detCtx)...)
+		// .git-credentials stores one URL per line (https://user:token@host),
+		// so per-line scanning attaches a line number to each detected token.
+		findings = append(findings, scanFileLines(ctx, filePath, p.Name(), p.detectorRegistry, 0)...)
 	}
 
 	return findings
