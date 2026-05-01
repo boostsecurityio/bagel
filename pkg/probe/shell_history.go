@@ -155,23 +155,113 @@ func (p *ShellHistoryProbe) processHistoryFile(ctx context.Context, historyPath 
 	return findings
 }
 
-// parseHistoryLine extracts the actual command from a shell history line
-// Handles zsh extended history format: `: timestamp:duration;command`
-// For other shells (bash, etc.), returns the line as-is
+// parseHistoryLine extracts the actual command from a shell history line.
+// Handles:
+//   - zsh extended history: `: timestamp:duration;command`
+//   - fish history (YAML-like): `- cmd: command` and `  cmd: command`
+//
+// For bash and other plain-line formats it returns the line as-is. Fish's
+// `when:` timestamp lines and other YAML metadata are returned as the empty
+// string so callers can skip them.
 func parseHistoryLine(line string) string {
-	// Check if this is a zsh extended history entry
-	// Format: : 1234567890:0;command
+	// zsh extended history: ": 1234567890:0;command"
 	if strings.HasPrefix(line, ":") {
-		// Find the semicolon that separates metadata from command
 		semicolonIdx := strings.Index(line, ";")
 		if semicolonIdx != -1 {
-			// Return everything after the semicolon (may be empty)
 			return line[semicolonIdx+1:]
 		}
 	}
 
-	// For bash or other formats, return the line as-is
+	// Fish history is a YAML stream of entries:
+	//   - cmd: <command>
+	//     when: <unix timestamp>
+	//     paths:
+	//       - <path>
+	// Strip the YAML list marker and unescape the bare command. The metadata
+	// rows ("when:", "paths:") aren't commands, so we drop them — leaving
+	// them in would only feed YAML noise to the detectors.
+	if cmd, ok := parseFishCmdLine(line); ok {
+		return cmd
+	}
+	if isFishMetadataLine(line) {
+		return ""
+	}
+
 	return line
+}
+
+// parseFishCmdLine returns the command portion of a fish history "cmd:" row
+// and true if the line matched. Fish writes one entry per multiline YAML
+// document, so the cmd line is either at the start of the entry ("- cmd: …")
+// or as a continuation key ("  cmd: …").
+func parseFishCmdLine(line string) (string, bool) {
+	trimmed := strings.TrimLeft(line, " \t")
+	trimmed = strings.TrimPrefix(trimmed, "- ")
+	const key = "cmd:"
+	if !strings.HasPrefix(trimmed, key) {
+		return "", false
+	}
+	cmd := strings.TrimLeft(trimmed[len(key):], " \t")
+	return unescapeFishCmd(cmd), true
+}
+
+// isFishMetadataLine reports whether the line is a fish YAML metadata row
+// that should be ignored ("when: ...", "paths:", "  - <path>").
+func isFishMetadataLine(line string) bool {
+	trimmed := strings.TrimLeft(line, " \t")
+	if trimmed == "" {
+		return false
+	}
+	switch {
+	case strings.HasPrefix(trimmed, "when:"):
+		return true
+	case strings.HasPrefix(trimmed, "paths:"):
+		return true
+	case strings.HasPrefix(trimmed, "- ") && !strings.HasPrefix(trimmed, "- cmd:"):
+		// "  - /some/path" continuation under paths.
+		return true
+	}
+	return false
+}
+
+// unescapeFishCmd reverses fish's YAML-style command escaping. Fish writes
+// a backslash before any character it considers special when serializing
+// history (newlines as "\n", backslashes as "\\", etc.). Leaving the escape
+// sequences in place would split tokens like `ghp_…` mid-secret if they
+// happened to contain a backslash-escaped char, so we materialize the
+// original command before handing it to the detectors.
+func unescapeFishCmd(cmd string) string {
+	if !strings.ContainsRune(cmd, '\\') {
+		return cmd
+	}
+	var b strings.Builder
+	b.Grow(len(cmd))
+	escaped := false
+	for _, r := range cmd {
+		if escaped {
+			switch r {
+			case 'n':
+				b.WriteByte('\n')
+			case 't':
+				b.WriteByte('\t')
+			case 'r':
+				b.WriteByte('\r')
+			default:
+				b.WriteRune(r)
+			}
+			escaped = false
+			continue
+		}
+		if r == '\\' {
+			escaped = true
+			continue
+		}
+		b.WriteRune(r)
+	}
+	if escaped {
+		b.WriteByte('\\')
+	}
+	return b.String()
 }
 
 // truncateCommand truncates a command to a reasonable length for display

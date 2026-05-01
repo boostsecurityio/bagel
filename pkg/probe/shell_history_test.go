@@ -260,6 +260,36 @@ func TestParseHistoryLine(t *testing.T) {
 			line:     ": 1234567890:0;",
 			expected: "",
 		},
+		{
+			name:     "Fish list-marker cmd line",
+			line:     "- cmd: ls -la",
+			expected: "ls -la",
+		},
+		{
+			name:     "Fish continuation cmd line (indented)",
+			line:     "  cmd: export GITHUB_TOKEN=ghp_1234567890123456789012345678901234567890",
+			expected: "export GITHUB_TOKEN=ghp_1234567890123456789012345678901234567890",
+		},
+		{
+			name:     "Fish cmd with escaped newlines unescaped to real newlines",
+			line:     `- cmd: cat <<EOF\nkey=ghp_1234567890123456789012345678901234567890\nEOF`,
+			expected: "cat <<EOF\nkey=ghp_1234567890123456789012345678901234567890\nEOF",
+		},
+		{
+			name:     "Fish when metadata line dropped",
+			line:     "  when: 1699876543",
+			expected: "",
+		},
+		{
+			name:     "Fish paths metadata key dropped",
+			line:     "  paths:",
+			expected: "",
+		},
+		{
+			name:     "Fish paths list item dropped",
+			line:     "    - /usr/bin/git",
+			expected: "",
+		},
 	}
 
 	for _, tt := range tests {
@@ -268,6 +298,47 @@ func TestParseHistoryLine(t *testing.T) {
 			assert.Equal(t, tt.expected, result)
 		})
 	}
+}
+
+func TestShellHistoryProbe_FishHistoryParsing(t *testing.T) {
+	tmpDir := t.TempDir()
+	ctx := context.Background()
+
+	fishHistoryPath := filepath.Join(tmpDir, "fish_history")
+	fishHistoryContent := `- cmd: ls -la
+  when: 1699876543
+- cmd: export GITHUB_TOKEN=ghp_1234567890123456789012345678901234567890
+  when: 1699876544
+- cmd: npm config set //registry.npmjs.org/:_authToken npm_abcdefghijklmnopqrstuvwxyz1234567890
+  when: 1699876545
+  paths:
+    - /usr/bin/npm
+- cmd: git status
+  when: 1699876546
+`
+	require.NoError(t, os.WriteFile(fishHistoryPath, []byte(fishHistoryContent), 0600))
+
+	index := fileindex.NewFileIndex()
+	index.Add("shell_history", fishHistoryPath)
+
+	registry := detector.NewRegistry()
+	registry.Register(detector.NewGitHubPATDetector())
+	registry.Register(detector.NewNPMTokenDetector())
+
+	probe := NewShellHistoryProbe(models.ProbeSettings{Enabled: true}, registry)
+	probe.SetFileIndex(index)
+
+	findings, err := probe.Execute(ctx)
+	require.NoError(t, err)
+
+	findingIDs := make(map[string]bool)
+	for _, f := range findings {
+		findingIDs[f.ID] = true
+		assert.NotNil(t, f.Metadata["line_number"], "Finding should have line number")
+	}
+
+	assert.True(t, findingIDs["github-token-classic-pat"], "Should detect GitHub PAT in fish history")
+	assert.True(t, findingIDs["npm-token-npm-auth-token"], "Should detect NPM token in fish history")
 }
 
 func TestTruncateCommand(t *testing.T) {
