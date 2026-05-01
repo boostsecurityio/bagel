@@ -37,6 +37,11 @@ var scrubCmd = &cobra.Command{
 history files with [REDACTED-<type>] markers. Preserves all context --
 only secrets become useless.
 
+Scrub only touches append-only history. AI CLI auth files (auth.json,
+oauth_creds.json) are deliberately excluded because the tools read them
+back to authenticate; use 'bagel scan' to surface those, then rotate the
+exposed credential out-of-band.
+
 By default shows what would be changed and asks for confirmation.
 Use --yes to skip the prompt, or --dry-run to only report.
 
@@ -182,8 +187,12 @@ func resolveScrubFiles(cmd *cobra.Command, registry *detector.Registry) ([]strin
 		return nil, fmt.Errorf("load config: %w", err)
 	}
 
+	// scrub deliberately omits the AI credentials probe: tools like opencode,
+	// codex and gemini read those files back to authenticate, so redacting
+	// them logs the user out (issue #44). Only append-only history sources
+	// — chat sessions and shell history — are safe to rewrite in place.
 	probes := []probe.Probe{
-		probe.NewAICliProbe(cfg.Probes.AICli, registry),
+		probe.NewAIChatsProbe(cfg.Probes.AIChats, registry),
 		probe.NewShellHistoryProbe(cfg.Probes.ShellHistory, registry),
 	}
 

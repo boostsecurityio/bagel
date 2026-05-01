@@ -31,17 +31,18 @@ type HostInfoConfig struct {
 
 // ProbeConfig contains configuration for all probes
 type ProbeConfig struct {
-	Git          ProbeSettings `yaml:"git" mapstructure:"git"`
-	SSH          ProbeSettings `yaml:"ssh" mapstructure:"ssh"`
-	NPM          ProbeSettings `yaml:"npm" mapstructure:"npm"`
-	Env          ProbeSettings `yaml:"env" mapstructure:"env"`
-	ShellHistory ProbeSettings `yaml:"shell_history" mapstructure:"shell_history"`
-	Cloud        ProbeSettings `yaml:"cloud" mapstructure:"cloud"`
-	JetBrains    ProbeSettings `yaml:"jetbrains" mapstructure:"jetbrains"`
-	GH           ProbeSettings `yaml:"gh" mapstructure:"gh"`
-	AICli        ProbeSettings `yaml:"ai_cli" mapstructure:"ai_cli"`
-	WireGuard    ProbeSettings `yaml:"wireguard" mapstructure:"wireguard"`
-	PyPI         ProbeSettings `yaml:"pypi" mapstructure:"pypi"`
+	Git           ProbeSettings `yaml:"git" mapstructure:"git"`
+	SSH           ProbeSettings `yaml:"ssh" mapstructure:"ssh"`
+	NPM           ProbeSettings `yaml:"npm" mapstructure:"npm"`
+	Env           ProbeSettings `yaml:"env" mapstructure:"env"`
+	ShellHistory  ProbeSettings `yaml:"shell_history" mapstructure:"shell_history"`
+	Cloud         ProbeSettings `yaml:"cloud" mapstructure:"cloud"`
+	JetBrains     ProbeSettings `yaml:"jetbrains" mapstructure:"jetbrains"`
+	GH            ProbeSettings `yaml:"gh" mapstructure:"gh"`
+	AICredentials ProbeSettings `yaml:"ai_credentials" mapstructure:"ai_credentials"`
+	AIChats       ProbeSettings `yaml:"ai_chats" mapstructure:"ai_chats"`
+	WireGuard     ProbeSettings `yaml:"wireguard" mapstructure:"wireguard"`
+	PyPI          ProbeSettings `yaml:"pypi" mapstructure:"pypi"`
 }
 
 // ProbeSettings contains settings for a specific probe

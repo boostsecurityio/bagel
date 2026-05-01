@@ -166,9 +166,14 @@ func initializeProbes(cfg *models.Config) []probe.Probe {
 		probes = append(probes, probe.NewGHProbe(cfg.Probes.GH, registry))
 	}
 
-	// AI CLI probe
-	if cfg.Probes.AICli.Enabled {
-		probes = append(probes, probe.NewAICliProbe(cfg.Probes.AICli, registry))
+	// AI credentials probe (auth/oauth files; scan only — scrub leaves these alone)
+	if cfg.Probes.AICredentials.Enabled {
+		probes = append(probes, probe.NewAICredentialsProbe(cfg.Probes.AICredentials, registry))
+	}
+
+	// AI chats probe (conversation history)
+	if cfg.Probes.AIChats.Enabled {
+		probes = append(probes, probe.NewAIChatsProbe(cfg.Probes.AIChats, registry))
 	}
 
 	// WireGuard probe
