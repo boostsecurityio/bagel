@@ -9,14 +9,17 @@ import (
 
 	"github.com/boostsecurityio/bagel/pkg/config"
 	"github.com/boostsecurityio/bagel/pkg/logger"
+	"github.com/boostsecurityio/bagel/pkg/versioncheck"
 	"github.com/rs/zerolog"
+	"github.com/rs/zerolog/log"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 )
 
 var (
-	cfgFile string
-	verbose bool
+	cfgFile             string
+	verbose             bool
+	disableVersionCheck bool
 )
 var (
 	Version string
@@ -47,7 +50,42 @@ Bagel never reads secret values — it only reports metadata and locations.`,
 		if cfgUsed := viper.ConfigFileUsed(); cfgUsed != "" {
 			log.Debug().Str("config_file", cfgUsed).Msg("Using config file")
 		}
+
+		runVersionCheck(cmd)
 	},
+}
+
+// versionCheckSkipCommands lists subcommands that must not trigger the
+// version check: "completion" is invoked by shells for tab-completion
+// lookups. Other subcommands (including "version" and "help") still pay the
+// once-per-day check, since the 24h cache means at most one network call.
+var versionCheckSkipCommands = map[string]struct{}{
+	"completion": {},
+}
+
+// runVersionCheck performs the once-per-day update check unless disabled by
+// flag, env var, or config. Commands listed in versionCheckSkipCommands and
+// any subcommand under them are excluded so users can run shell completion
+// without triggering a network call.
+func runVersionCheck(cmd *cobra.Command) {
+	for c := cmd; c != nil; c = c.Parent() {
+		if _, skip := versionCheckSkipCommands[c.Name()]; skip {
+			return
+		}
+	}
+	disabled := disableVersionCheck || viper.GetBool("disable_version_check")
+	result := versioncheck.Run(cmd.Context(), Version, disabled)
+	if result == nil || !result.UpdateAvailable {
+		return
+	}
+	target := result.LatestURL
+	if target == "" {
+		target = "https://github.com/boostsecurityio/bagel/releases"
+	}
+	log.Warn().
+		Str("current_version", Version).
+		Str("latest_version", result.LatestVersion).
+		Msgf("A new version of bagel is available: %s — %s", result.LatestVersion, target)
 }
 
 // Execute runs the root command
@@ -64,11 +102,16 @@ func init() {
 	// Global flags
 	rootCmd.PersistentFlags().StringVar(&cfgFile, "config", "", "config file (default is "+config.GetConfigHelpPath()+")")
 	rootCmd.PersistentFlags().BoolVarP(&verbose, "verbose", "v", false, "verbose output")
+	rootCmd.PersistentFlags().BoolVar(&disableVersionCheck, "disable-version-check", false, "Disable the once-per-day check for newer bagel releases")
 
 	// Bind flags to viper
 	if err := viper.BindPFlag("verbose", rootCmd.PersistentFlags().Lookup("verbose")); err != nil {
 		log := zerolog.New(os.Stderr).With().Timestamp().Logger()
 		log.Fatal().Err(err).Msg("Error binding verbose flag")
+	}
+	if err := viper.BindPFlag("disable_version_check", rootCmd.PersistentFlags().Lookup("disable-version-check")); err != nil {
+		log := zerolog.New(os.Stderr).With().Timestamp().Logger()
+		log.Fatal().Err(err).Msg("Error binding disable-version-check flag")
 	}
 }
 
@@ -86,5 +129,7 @@ func initConfig() {
 	viper.SetEnvPrefix("BAGEL")
 	viper.AutomaticEnv()
 
-	// Config file reading will be logged in PersistentPreRun after logger is setup
+	// Read config so disable_version_check is available in PersistentPreRun.
+	// Errors here are non-fatal; scan command performs its own validated load.
+	_ = viper.ReadInConfig()
 }

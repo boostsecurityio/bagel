@@ -4,6 +4,7 @@ go 1.25.1
 
 require (
 	github.com/charlievieth/fastwalk v1.0.14
+	github.com/google/uuid v1.6.0
 	github.com/mattn/go-isatty v0.0.20
 	github.com/olekukonko/tablewriter v1.1.0
 	github.com/rs/zerolog v1.34.0
@@ -14,6 +15,7 @@ require (
 	golang.org/x/sync v0.17.0
 	golang.org/x/sys v0.29.0
 	golang.org/x/term v0.28.0
+	gopkg.in/yaml.v3 v3.0.1
 )
 
 require (
@@ -38,5 +40,4 @@ require (
 	github.com/subosito/gotenv v1.6.0 // indirect
 	go.yaml.in/yaml/v3 v3.0.4 // indirect
 	golang.org/x/text v0.28.0 // indirect
-	gopkg.in/yaml.v3 v3.0.1 // indirect
 )

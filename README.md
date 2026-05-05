@@ -123,6 +123,7 @@ This scans your workstation and outputs findings to stdout in JSON format.
 | `--no-progress` | Disable progress bars |
 | `--verbose`, `-v` | Enable verbose (debug) logging |
 | `--config` | Path to configuration file |
+| `--disable-version-check` | Disable the once-per-day check for newer bagel releases (env: `BAGEL_DISABLE_VERSION_CHECK`, config: `disable_version_check`) |
 
 ### Examples
 
@@ -182,6 +183,14 @@ output:
 ```
 
 All probes are enabled by default. To disable a probe, set `enabled: false`.
+
+### Version check telemetry
+
+By default, `bagel` reaches out at most once every 24 hours to check whether a newer release is available. The request reports the current bagel version, an anonymous instance identifier persisted under the platform config directory (`~/.config/bagel/version-check.yaml` on Unix, `%APPDATA%\bagel\version-check.yaml` on Windows), and a count of CLI invocations since the last check. No scan, host, or finding data is sent. To disable, use any of:
+
+- `--disable-version-check` flag
+- `BAGEL_DISABLE_VERSION_CHECK=1` environment variable
+- `disable_version_check: true` in `bagel.yaml`
 
 ---
 

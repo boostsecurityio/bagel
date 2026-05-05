@@ -5,14 +5,15 @@ package models
 
 // Config represents the Bagel configuration
 type Config struct {
-	Version     int               `yaml:"version" mapstructure:"version"`
-	Probes      ProbeConfig       `yaml:"probes" mapstructure:"probes"`
-	Privacy     PrivacyConfig     `yaml:"privacy" mapstructure:"privacy"`
-	Output      OutputConfig      `yaml:"output" mapstructure:"output"`
-	SeverityMap map[string]string `yaml:"severity_map" mapstructure:"severity_map"`
-	FileIndex   FileIndexConfig   `yaml:"file_index" mapstructure:"file_index"`
-	HostInfo    HostInfoConfig    `yaml:"hostinfo" mapstructure:"hostinfo"`
-	Resources   ResourcesConfig   `yaml:"resources" mapstructure:"resources"`
+	Version             int               `yaml:"version" mapstructure:"version"`
+	Probes              ProbeConfig       `yaml:"probes" mapstructure:"probes"`
+	Privacy             PrivacyConfig     `yaml:"privacy" mapstructure:"privacy"`
+	Output              OutputConfig      `yaml:"output" mapstructure:"output"`
+	SeverityMap         map[string]string `yaml:"severity_map" mapstructure:"severity_map"`
+	FileIndex           FileIndexConfig   `yaml:"file_index" mapstructure:"file_index"`
+	HostInfo            HostInfoConfig    `yaml:"hostinfo" mapstructure:"hostinfo"`
+	Resources           ResourcesConfig   `yaml:"resources" mapstructure:"resources"`
+	DisableVersionCheck bool              `yaml:"disable_version_check,omitempty" mapstructure:"disable_version_check"`
 }
 
 // ResourcesConfig caps bagel's resource usage so callers running it as a
