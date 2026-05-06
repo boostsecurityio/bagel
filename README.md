@@ -171,7 +171,9 @@ probes:
     enabled: true
   gh:
     enabled: true
-  ai_cli:
+  ai_credentials:
+    enabled: true
+  ai_chats:
     enabled: true
 privacy:
   redact_paths: []
