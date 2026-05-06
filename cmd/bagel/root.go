@@ -11,7 +11,6 @@ import (
 	"github.com/boostsecurityio/bagel/pkg/logger"
 	"github.com/boostsecurityio/bagel/pkg/versioncheck"
 	"github.com/rs/zerolog"
-	"github.com/rs/zerolog/log"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 )
@@ -74,7 +73,8 @@ func runVersionCheck(cmd *cobra.Command) {
 		}
 	}
 	disabled := disableVersionCheck || viper.GetBool("disable_version_check")
-	result := versioncheck.Run(cmd.Context(), Version, disabled)
+	ctx := cmd.Context()
+	result := versioncheck.Run(ctx, Version, disabled)
 	if result == nil || !result.UpdateAvailable {
 		return
 	}
@@ -82,7 +82,7 @@ func runVersionCheck(cmd *cobra.Command) {
 	if target == "" {
 		target = "https://github.com/boostsecurityio/bagel/releases"
 	}
-	log.Warn().
+	zerolog.Ctx(ctx).Warn().
 		Str("current_version", Version).
 		Str("latest_version", result.LatestVersion).
 		Msgf("A new version of bagel is available: %s — %s", result.LatestVersion, target)
