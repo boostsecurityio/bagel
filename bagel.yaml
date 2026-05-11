@@ -8,10 +8,20 @@ probes:
     enabled: true
   gh:
     enabled: true
-  ai_cli:
+  ai_credentials:
+    # Scans AI CLI auth/oauth files (scan only; scrub does not touch these
+    # because tools require them to authenticate).
     enabled: true
     flags:
-      # max_file_size: maximum bytes to read from an AI CLI file before skipping it.
+      # max_file_size: maximum bytes to read from a credential file before
+      # skipping it. Default: 1048576 (1 MB).
+      # max_file_size: 1048576
+  ai_chats:
+    # Scans AI CLI conversation history (jsonl/json session logs). Both scan
+    # and scrub target these — they're append-only logs.
+    enabled: true
+    flags:
+      # max_file_size: maximum bytes to read from a chat file before skipping it.
       # Prevents scan hangs on large conversation histories. Default: 1048576 (1 MB).
       # max_file_size: 1048576
 privacy:

@@ -208,6 +208,7 @@ func TestParseHistoryLine(t *testing.T) {
 	tests := []struct {
 		name     string
 		line     string
+		isFish   bool
 		expected string
 	}{
 		{
@@ -260,14 +261,134 @@ func TestParseHistoryLine(t *testing.T) {
 			line:     ": 1234567890:0;",
 			expected: "",
 		},
+		{
+			name:     "Fish list-marker cmd line",
+			line:     "- cmd: ls -la",
+			isFish:   true,
+			expected: "ls -la",
+		},
+		{
+			name:     "Fish continuation cmd line (indented)",
+			line:     "  cmd: export GITHUB_TOKEN=ghp_1234567890123456789012345678901234567890",
+			isFish:   true,
+			expected: "export GITHUB_TOKEN=ghp_1234567890123456789012345678901234567890",
+		},
+		{
+			name:     "Fish cmd with escaped newlines unescaped to real newlines",
+			line:     `- cmd: cat <<EOF\nkey=ghp_1234567890123456789012345678901234567890\nEOF`,
+			isFish:   true,
+			expected: "cat <<EOF\nkey=ghp_1234567890123456789012345678901234567890\nEOF",
+		},
+		{
+			name:     "Fish when metadata line dropped",
+			line:     "  when: 1699876543",
+			isFish:   true,
+			expected: "",
+		},
+		{
+			name:     "Fish paths metadata key dropped",
+			line:     "  paths:",
+			isFish:   true,
+			expected: "",
+		},
+		{
+			name:     "Fish paths list item dropped",
+			line:     "    - /usr/bin/git",
+			isFish:   true,
+			expected: "",
+		},
+		// Regression: bash/zsh lines that look fish-y must pass through
+		// untouched when isFish is false. Without the gate, these would be
+		// silently dropped or rewritten.
+		{
+			name:     "Bash command starting with dash space passes through",
+			line:     "- this is a weird bash alias",
+			expected: "- this is a weird bash alias",
+		},
+		{
+			name:     "Bash line beginning with when: passes through",
+			line:     "when: do_something",
+			expected: "when: do_something",
+		},
+		{
+			name:     "Bash line beginning with paths: passes through",
+			line:     "paths: /usr/local/bin",
+			expected: "paths: /usr/local/bin",
+		},
+		{
+			name:     "Bash line that looks like fish cmd: passes through",
+			line:     "- cmd: this is bash, not fish",
+			expected: "- cmd: this is bash, not fish",
+		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := parseHistoryLine(tt.line)
+			result := parseHistoryLine(tt.line, tt.isFish)
 			assert.Equal(t, tt.expected, result)
 		})
 	}
+}
+
+func TestIsFishHistoryPath(t *testing.T) {
+	tests := []struct {
+		path     string
+		expected bool
+	}{
+		{path: "/Users/me/.local/share/fish/fish_history", expected: true},
+		{path: "/home/me/.local/share/fish/fish_history", expected: true},
+		{path: "/tmp/fish_history", expected: true},
+		{path: "/Users/me/.bash_history", expected: false},
+		{path: "/Users/me/.zsh_history", expected: false},
+		{path: "/Users/me/.history", expected: false},
+		{path: "", expected: false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.path, func(t *testing.T) {
+			assert.Equal(t, tt.expected, isFishHistoryPath(tt.path))
+		})
+	}
+}
+
+func TestShellHistoryProbe_FishHistoryParsing(t *testing.T) {
+	tmpDir := t.TempDir()
+	ctx := context.Background()
+
+	fishHistoryPath := filepath.Join(tmpDir, "fish_history")
+	fishHistoryContent := `- cmd: ls -la
+  when: 1699876543
+- cmd: export GITHUB_TOKEN=ghp_1234567890123456789012345678901234567890
+  when: 1699876544
+- cmd: npm config set //registry.npmjs.org/:_authToken npm_abcdefghijklmnopqrstuvwxyz1234567890
+  when: 1699876545
+  paths:
+    - /usr/bin/npm
+- cmd: git status
+  when: 1699876546
+`
+	require.NoError(t, os.WriteFile(fishHistoryPath, []byte(fishHistoryContent), 0600))
+
+	index := fileindex.NewFileIndex()
+	index.Add("shell_history", fishHistoryPath)
+
+	registry := detector.NewRegistry()
+	registry.Register(detector.NewGitHubPATDetector())
+	registry.Register(detector.NewNPMTokenDetector())
+
+	probe := NewShellHistoryProbe(models.ProbeSettings{Enabled: true}, registry)
+	probe.SetFileIndex(index)
+
+	findings, err := probe.Execute(ctx)
+	require.NoError(t, err)
+
+	findingIDs := make(map[string]bool)
+	for _, f := range findings {
+		findingIDs[f.ID] = true
+		assert.NotNil(t, f.Metadata["line_number"], "Finding should have line number")
+	}
+
+	assert.True(t, findingIDs["github-token-classic-pat"], "Should detect GitHub PAT in fish history")
+	assert.True(t, findingIDs["npm-token-npm-auth-token"], "Should detect NPM token in fish history")
 }
 
 func TestTruncateCommand(t *testing.T) {

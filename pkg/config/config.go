@@ -11,6 +11,7 @@ import (
 	"runtime"
 
 	"github.com/boostsecurityio/bagel/pkg/models"
+	"github.com/rs/zerolog/log"
 	"github.com/spf13/viper"
 )
 
@@ -51,7 +52,37 @@ func Load(configPath string) (*models.Config, error) {
 		return nil, fmt.Errorf("failed to unmarshal config: %w", err)
 	}
 
+	if err := applyLegacyAICliConfig(v, &cfg); err != nil {
+		return nil, err
+	}
+
 	return &cfg, nil
+}
+
+// applyLegacyAICliConfig mirrors a deprecated probes.ai_cli block onto the
+// new probes.ai_credentials and probes.ai_chats settings. The probe was
+// split when scrub stopped touching credential files (issue #44); existing
+// configs that disabled or tuned ai_cli should keep working without edits.
+//
+// We don't SetDefault ai_cli, so v.Get returns nil unless the user wrote it
+// somewhere (config file, env, flag). When present, both new probes inherit
+// the same enabled/flags — a user mixing legacy and new keys gets the
+// legacy values, which the deprecation warning calls out.
+func applyLegacyAICliConfig(v *viper.Viper, cfg *models.Config) error {
+	if v.Get("probes.ai_cli") == nil {
+		return nil
+	}
+	var legacy models.ProbeSettings
+	if err := v.UnmarshalKey("probes.ai_cli", &legacy); err != nil {
+		return fmt.Errorf("decode legacy probes.ai_cli: %w", err)
+	}
+	cfg.Probes.AICredentials = legacy
+	cfg.Probes.AIChats = legacy
+	log.Warn().Msg(
+		"config: probes.ai_cli is deprecated; rename it to probes.ai_credentials " +
+			"and probes.ai_chats (scrub no longer touches AI credential files).",
+	)
+	return nil
 }
 
 // setDefaults sets default configuration values
@@ -65,7 +96,8 @@ func setDefaults(v *viper.Viper) {
 	v.SetDefault("probes.cloud.enabled", true)
 	v.SetDefault("probes.jetbrains.enabled", true)
 	v.SetDefault("probes.gh.enabled", true)
-	v.SetDefault("probes.ai_cli.enabled", true)
+	v.SetDefault("probes.ai_credentials.enabled", true)
+	v.SetDefault("probes.ai_chats.enabled", true)
 	v.SetDefault("probes.wireguard.enabled", true)
 	v.SetDefault("probes.pypi.enabled", true)
 	v.SetDefault("output.include_file_hashes", false)

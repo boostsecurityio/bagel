@@ -326,6 +326,38 @@ func TestScrubFile(t *testing.T) {
 	assert.NotContains(t, string(data), "AKIAIOSFODNN7EXAMPLE")
 }
 
+func TestScrubFile_FishHistory(t *testing.T) {
+	t.Parallel()
+	registry := newTestRegistry()
+
+	dir := t.TempDir()
+	path := filepath.Join(dir, "fish_history")
+	content := `- cmd: ls -la
+  when: 1699876543
+- cmd: export GITHUB_TOKEN=ghp_AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+  when: 1699876544
+- cmd: npm publish --token npm_BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
+  when: 1699876545
+`
+	require.NoError(t, os.WriteFile(path, []byte(content), 0600))
+
+	changed, counts, err := scrubFile(path, registry)
+	require.NoError(t, err)
+	assert.True(t, changed, "fish history with secrets must be reported as changed")
+	assert.Equal(t, 1, counts["REDACTED-github-pat"])
+	assert.Equal(t, 1, counts["REDACTED-npm-token"])
+
+	data, err := os.ReadFile(path)
+	require.NoError(t, err)
+	assert.NotContains(t, string(data), "ghp_AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA")
+	assert.NotContains(t, string(data), "npm_BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB")
+	assert.Contains(t, string(data), "[REDACTED-github-pat]")
+	assert.Contains(t, string(data), "[REDACTED-npm-token]")
+	// fish YAML structure must remain intact so fish can still parse the file.
+	assert.Contains(t, string(data), "- cmd: ")
+	assert.Contains(t, string(data), "  when: 1699876544")
+}
+
 func TestScrubFile_NoChanges(t *testing.T) {
 	t.Parallel()
 	registry := newTestRegistry()
