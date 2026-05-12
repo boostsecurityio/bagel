@@ -186,5 +186,15 @@ func initializeProbes(cfg *models.Config) []probe.Probe {
 		probes = append(probes, probe.NewPyPIProbe(cfg.Probes.PyPI, registry))
 	}
 
+	// Kubernetes probe — credential extraction from kubeconfig
+	if cfg.Probes.Kube.Enabled {
+		probes = append(probes, probe.NewKubeProbe(cfg.Probes.Kube, registry))
+	}
+
+	// Docker/Podman probe — inline registry credentials
+	if cfg.Probes.Docker.Enabled {
+		probes = append(probes, probe.NewDockerProbe(cfg.Probes.Docker, registry))
+	}
+
 	return probes
 }
