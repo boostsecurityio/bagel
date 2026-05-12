@@ -44,6 +44,8 @@ type ProbeConfig struct {
 	AIChats       ProbeSettings `yaml:"ai_chats" mapstructure:"ai_chats"`
 	WireGuard     ProbeSettings `yaml:"wireguard" mapstructure:"wireguard"`
 	PyPI          ProbeSettings `yaml:"pypi" mapstructure:"pypi"`
+	Kube          ProbeSettings `yaml:"kube" mapstructure:"kube"`
+	Docker        ProbeSettings `yaml:"docker" mapstructure:"docker"`
 }
 
 // ProbeSettings contains settings for a specific probe

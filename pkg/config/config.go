@@ -100,6 +100,8 @@ func setDefaults(v *viper.Viper) {
 	v.SetDefault("probes.ai_chats.enabled", true)
 	v.SetDefault("probes.wireguard.enabled", true)
 	v.SetDefault("probes.pypi.enabled", true)
+	v.SetDefault("probes.kube.enabled", true)
+	v.SetDefault("probes.docker.enabled", true)
 	v.SetDefault("output.include_file_hashes", false)
 	v.SetDefault("output.include_file_content", false)
 
@@ -209,6 +211,9 @@ func setDefaults(v *viper.Viper) {
 
 		// Docker
 		{"name": "docker_config", "patterns": []string{".docker/config.json"}, "type": "glob"},
+
+		// Podman / containers — same schema as docker config.json, different path.
+		{"name": "podman_config", "patterns": []string{".config/containers/auth.json"}, "type": "glob"},
 
 		// Kubernetes
 		{"name": "kubeconfig", "patterns": []string{".kube/config"}, "type": "glob"},
