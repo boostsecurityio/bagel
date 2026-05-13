@@ -102,6 +102,7 @@ func setDefaults(v *viper.Viper) {
 	v.SetDefault("probes.pypi.enabled", true)
 	v.SetDefault("probes.kube.enabled", true)
 	v.SetDefault("probes.docker.enabled", true)
+	v.SetDefault("probes.iac.enabled", true)
 	v.SetDefault("output.include_file_hashes", false)
 	v.SetDefault("output.include_file_content", false)
 
@@ -264,6 +265,32 @@ func setDefaults(v *viper.Viper) {
 			"Library/Application Support/pip/pip.conf",
 			// Windows
 			"AppData/Roaming/pip/pip.ini",
+		}, "type": "glob"},
+
+		// Terraform — credentials live in either path. The JSON form is
+		// authoritative for `terraform login`; the legacy HCL form is
+		// still common from manual setups.
+		{"name": "terraform_credentials", "patterns": []string{
+			".terraform.d/credentials.tfrc.json",
+			".terraformrc",
+		}, "type": "glob"},
+		// Terraform variable / state files. tfvars commonly hold cloud
+		// creds and DB passwords; local-backend state serializes resource
+		// outputs (including sensitive ones) as plaintext JSON.
+		{"name": "terraform_vars", "patterns": []string{
+			"*.tfvars",
+			"*.auto.tfvars",
+		}, "type": "glob"},
+		{"name": "terraform_state", "patterns": []string{
+			"terraform.tfstate",
+			"terraform.tfstate.backup",
+		}, "type": "glob"},
+
+		// Helm — username/password live under repositories[] in this file.
+		{"name": "helm_repositories", "patterns": []string{
+			".config/helm/repositories.yaml",
+			// macOS
+			"Library/Preferences/helm/repositories.yaml",
 		}, "type": "glob"},
 	})
 }

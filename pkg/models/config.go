@@ -46,6 +46,7 @@ type ProbeConfig struct {
 	PyPI          ProbeSettings `yaml:"pypi" mapstructure:"pypi"`
 	Kube          ProbeSettings `yaml:"kube" mapstructure:"kube"`
 	Docker        ProbeSettings `yaml:"docker" mapstructure:"docker"`
+	IaC           ProbeSettings `yaml:"iac" mapstructure:"iac"`
 }
 
 // ProbeSettings contains settings for a specific probe
