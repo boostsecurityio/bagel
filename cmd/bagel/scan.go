@@ -121,6 +121,10 @@ func initializeProbes(cfg *models.Config) []probe.Probe {
 	registry.Register(detector.NewPyPITokenDetector())
 	registry.Register(detector.NewWireGuardKeyDetector())
 	registry.Register(detector.NewSplunkTokenDetector())
+	registry.Register(detector.NewDatabaseConnectionDetector())
+	registry.Register(detector.NewSlackTokenDetector())
+	registry.Register(detector.NewStripeKeyDetector())
+	registry.Register(detector.NewTwilioKeyDetector())
 	registry.Register(detector.NewGenericAPIKeyDetector())
 	registry.Register(detector.NewJWTDetector())
 	// Add more detectors here as they are implemented:

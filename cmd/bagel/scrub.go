@@ -96,6 +96,10 @@ func newScrubRegistry() *detector.Registry {
 	registry.Register(detector.NewVaultTokenDetector())
 	registry.Register(detector.NewPyPITokenDetector())
 	registry.Register(detector.NewWireGuardKeyDetector())
+	registry.Register(detector.NewDatabaseConnectionDetector())
+	registry.Register(detector.NewSlackTokenDetector())
+	registry.Register(detector.NewStripeKeyDetector())
+	registry.Register(detector.NewTwilioKeyDetector())
 	registry.Register(detector.NewJWTDetector())
 	registry.Register(detector.NewGenericAPIKeyDetector())
 	return registry
