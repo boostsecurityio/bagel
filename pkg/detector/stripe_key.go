@@ -73,7 +73,7 @@ func (d *StripeKeyDetector) Detect(
 	content string,
 	ctx *models.DetectionContext,
 ) []models.Finding {
-	var findings []models.Finding
+	findings := make([]models.Finding, 0, 4)
 	seen := make(map[string]bool)
 
 	type variant struct {

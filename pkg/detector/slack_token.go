@@ -63,10 +63,12 @@ func (d *SlackTokenDetector) Detect(
 	content string,
 	ctx *models.DetectionContext,
 ) []models.Finding {
-	var findings []models.Finding
+	wsMatches := d.workspacePattern.FindAllStringSubmatch(content, -1)
+	appMatches := d.appPattern.FindAllStringSubmatch(content, -1)
+	findings := make([]models.Finding, 0, len(wsMatches)+len(appMatches))
 	seen := make(map[string]bool)
 
-	for _, m := range d.workspacePattern.FindAllStringSubmatch(content, -1) {
+	for _, m := range wsMatches {
 		token := m[1]
 		if seen[token] {
 			continue
@@ -74,7 +76,7 @@ func (d *SlackTokenDetector) Detect(
 		seen[token] = true
 		findings = append(findings, d.makeFinding(token, slackPrefixClass(token), ctx))
 	}
-	for _, m := range d.appPattern.FindAllStringSubmatch(content, -1) {
+	for _, m := range appMatches {
 		token := m[1]
 		if seen[token] {
 			continue
