@@ -300,7 +300,7 @@ func populateStandardClaims(metadata map[string]any, c *jwtClaims) {
 	}
 	if exp, ok := numericClaim(c.Exp); ok {
 		metadata["exp"] = exp
-		metadata["expired"] = time.Now().Unix() > exp
+		metadata["expired"] = time.Now().Unix() >= exp
 	}
 	if iat, ok := numericClaim(c.Iat); ok {
 		metadata["iat"] = iat
