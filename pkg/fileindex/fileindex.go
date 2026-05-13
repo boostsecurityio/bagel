@@ -109,8 +109,12 @@ func compilePatterns(patterns []Pattern) []compiledPattern {
 	return out
 }
 
-// compilePattern classifies a raw entry into its minimum-cost matcher: exact,
-// basename glob, literal path (suffix match at any depth), or anchored path glob.
+// compilePattern classifies a raw entry into its minimum-cost matcher:
+// exact, basename glob (matches anywhere), literal path (suffix match
+// at any depth), or wildcard path glob (suffix match against the last
+// N+1 segments of the relPath, where N = number of slashes in the
+// pattern). All three glob shapes match anywhere under the base dir;
+// users who need anchoring can use PatternTypeExact instead.
 func compilePattern(kind PatternType, pat string) patternMatcher {
 	switch kind {
 	case PatternTypeExact:
@@ -142,8 +146,21 @@ func compilePattern(kind PatternType, pat string) patternMatcher {
 		if _, err := filepath.Match(normalized, ""); err != nil {
 			return func(string, string) bool { return false }
 		}
+		// Suffix-match: pattern matches the last N+1 segments of the
+		// relPath (N = slash count in pattern). Same shape as the
+		// literal-path branch above, just with filepath.Match doing the
+		// per-segment comparison. This is what lets a pattern like
+		// `.claude/commands/*.md` catch both `~/.claude/commands/foo.md`
+		// (home-level) and `~/projects/repo/.claude/commands/foo.md`
+		// (project-level) without forcing callers to enumerate depths.
+		needed := strings.Count(normalized, string(os.PathSeparator)) + 1
 		return func(_, relPath string) bool {
-			matched, _ := filepath.Match(normalized, relPath)
+			parts := strings.Split(relPath, string(os.PathSeparator))
+			if len(parts) < needed {
+				return false
+			}
+			suffix := strings.Join(parts[len(parts)-needed:], string(os.PathSeparator))
+			matched, _ := filepath.Match(normalized, suffix)
 			return matched
 		}
 	default:

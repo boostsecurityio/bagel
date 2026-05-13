@@ -63,8 +63,25 @@ func (p *ContextProbe) SetFileIndex(index *fileindex.FileIndex) {
 	p.fileIndex = index
 }
 
-// Execute walks every indexed CLAUDE.md / AGENTS.md (matched at any
-// depth) and line-scans them through the detector registry.
+// aiContextPatterns lists every file-index pattern whose matches hold
+// AI agent user-authored context. Memory files (CLAUDE.md / AGENTS.md)
+// are basename-globbed so they catch every project; command/agent/
+// skill/instruction patterns are user-level (~/.claude, ~/.codex,
+// ~/.agents) because the file index doesn't support `**` globs and
+// project-level versions would need that.
+var aiContextPatterns = []string{
+	"ai_memory_md",       // CLAUDE.md / AGENTS.md anywhere under home
+	"claude_commands",    // ~/.claude/commands/*.md
+	"claude_agents",      // ~/.claude/agents/*.md
+	"claude_skills",      // ~/.claude/skills/*/*.md
+	"agents_skills",      // ~/.agents/skills/*/*.md (cross-agent convention)
+	"codex_instructions", // ~/.codex/instructions.md
+	"codex_memories",     // ~/.codex/memories/*
+	"codex_skills",       // ~/.codex/skills/*/*.md
+}
+
+// Execute walks every indexed context/memory file and line-scans them
+// through the detector registry.
 func (p *ContextProbe) Execute(ctx context.Context) ([]models.Finding, error) {
 	if p.fileIndex == nil {
 		log.Ctx(ctx).Warn().
@@ -73,9 +90,16 @@ func (p *ContextProbe) Execute(ctx context.Context) ([]models.Finding, error) {
 		return nil, nil
 	}
 
+	seen := make(map[string]struct{})
 	var findings []models.Finding
-	for _, path := range p.fileIndex.Get("ai_memory_md") {
-		findings = append(findings, p.scanFile(ctx, path)...)
+	for _, pattern := range aiContextPatterns {
+		for _, path := range p.fileIndex.Get(pattern) {
+			if _, dup := seen[path]; dup {
+				continue
+			}
+			seen[path] = struct{}{}
+			findings = append(findings, p.scanFile(ctx, path)...)
+		}
 	}
 	return findings, nil
 }

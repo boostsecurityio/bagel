@@ -273,6 +273,25 @@ func setDefaults(v *viper.Viper) {
 			"AGENTS.md",
 		}, "type": "glob"},
 
+		// Claude Code user-level customization. Commands, agents, and
+		// skills are user-authored Markdown that Claude loads as
+		// context — secrets in the prompt body get sent to the model
+		// on every invocation.
+		{"name": "claude_commands", "patterns": []string{".claude/commands/*.md"}, "type": "glob"},
+		{"name": "claude_agents", "patterns": []string{".claude/agents/*.md"}, "type": "glob"},
+		// Skills usually have SKILL.md at the skill root plus optional
+		// sibling .md docs; the glob catches both shapes.
+		{"name": "claude_skills", "patterns": []string{".claude/skills/*/*.md"}, "type": "glob"},
+		// Cross-agent skill store (a number of plugins symlink into
+		// ~/.agents/skills/). Worth scanning so the underlying files
+		// surface even when symlinks aren't being followed.
+		{"name": "agents_skills", "patterns": []string{".agents/skills/*/*.md"}, "type": "glob"},
+
+		// Codex CLI context/memory.
+		{"name": "codex_instructions", "patterns": []string{".codex/instructions.md"}, "type": "glob"},
+		{"name": "codex_memories", "patterns": []string{".codex/memories/*"}, "type": "glob"},
+		{"name": "codex_skills", "patterns": []string{".codex/skills/*/*.md"}, "type": "glob"},
+
 		// WireGuard (user-level configs; system paths are checked directly by the probe)
 		{"name": "wireguard_config", "patterns": []string{".config/wireguard/*.conf"}, "type": "glob"},
 
