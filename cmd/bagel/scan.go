@@ -120,6 +120,7 @@ func initializeProbes(cfg *models.Config) []probe.Probe {
 	registry.Register(detector.NewVaultTokenDetector())
 	registry.Register(detector.NewPyPITokenDetector())
 	registry.Register(detector.NewWireGuardKeyDetector())
+	registry.Register(detector.NewSplunkTokenDetector())
 	registry.Register(detector.NewGenericAPIKeyDetector())
 	registry.Register(detector.NewJWTDetector())
 	// Add more detectors here as they are implemented:
