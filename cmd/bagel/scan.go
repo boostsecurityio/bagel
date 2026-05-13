@@ -120,11 +120,12 @@ func initializeProbes(cfg *models.Config) []probe.Probe {
 	registry.Register(detector.NewVaultTokenDetector())
 	registry.Register(detector.NewPyPITokenDetector())
 	registry.Register(detector.NewWireGuardKeyDetector())
+	registry.Register(detector.NewDatabaseConnectionDetector())
+	registry.Register(detector.NewSlackTokenDetector())
+	registry.Register(detector.NewStripeKeyDetector())
+	registry.Register(detector.NewTwilioKeyDetector())
 	registry.Register(detector.NewGenericAPIKeyDetector())
 	registry.Register(detector.NewJWTDetector())
-	// Add more detectors here as they are implemented:
-	// registry.Register(detector.NewSlackTokenDetector())
-	// etc.
 
 	// Git probe
 	if cfg.Probes.Git.Enabled {
