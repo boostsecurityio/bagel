@@ -252,6 +252,18 @@ func setDefaults(v *viper.Viper) {
 		{"name": "claude_chats", "patterns": []string{".claude/projects/*/*.jsonl"}, "type": "glob"},
 		{"name": "opencode_chats", "patterns": []string{".local/share/opencode/storage/part/msg_*/prt_*.json"}, "type": "glob"},
 
+		// Additional AI agent history / paste / env surfaces beyond
+		// session rollouts. Users routinely paste tokens into prompts;
+		// the paste-cache is literally a record of those pastes. REPL
+		// history files capture every prompt the user submitted at the
+		// top level (separate from per-session rollouts).
+		{"name": "claude_repl_history", "patterns": []string{".claude/history.jsonl"}, "type": "glob"},
+		{"name": "claude_paste_cache", "patterns": []string{".claude/paste-cache/*"}, "type": "glob"},
+		{"name": "claude_session_env", "patterns": []string{".claude/session-env/*"}, "type": "glob"},
+		{"name": "codex_repl_history", "patterns": []string{".codex/history.jsonl"}, "type": "glob"},
+		{"name": "opencode_session_info", "patterns": []string{".local/share/opencode/storage/session/info/*.json"}, "type": "glob"},
+		{"name": "opencode_session_message", "patterns": []string{".local/share/opencode/storage/session/message/*/*.json"}, "type": "glob"},
+
 		// AI agent MCP server configs. mcpServers blocks carry the env
 		// map that holds API tokens for third-party services (GitHub
 		// PATs, Slack tokens, etc.). claude.json is the application
