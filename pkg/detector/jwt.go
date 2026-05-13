@@ -4,6 +4,7 @@
 package detector
 
 import (
+	"bytes"
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
@@ -321,7 +322,7 @@ func parseJWTClaims(token string) *jwtClaims {
 	if err != nil {
 		return nil
 	}
-	decoder := json.NewDecoder(strings.NewReader(string(payload)))
+	decoder := json.NewDecoder(bytes.NewReader(payload))
 	decoder.UseNumber()
 	var c jwtClaims
 	if err := decoder.Decode(&c); err != nil {
