@@ -4,12 +4,14 @@
 package probe
 
 import (
+	"bytes"
 	"context"
 	"encoding/base64"
 	"fmt"
 	"os"
 	"runtime"
 	"strings"
+	"unicode"
 
 	"github.com/boostsecurityio/bagel/pkg/detector"
 	"github.com/boostsecurityio/bagel/pkg/fileindex"
@@ -142,9 +144,11 @@ func (p *KubeProbe) processKubeconfig(ctx context.Context, path string) []models
 		return nil
 	}
 
-	// Line scan catches plaintext token: / id-token: / refresh-token:
-	// fields. JWT enrichment classifies K8s SA JWTs in token: lines.
-	findings := scanFileLines(ctx, path, p.Name(), p.detectorRegistry, int(p.maxFileSize)+1)
+	// Scan the bytes we already read instead of re-opening the file —
+	// one I/O round-trip plus zero TOCTOU window between line scan and
+	// YAML parse (they operate on the same content). Matches the
+	// pattern in pkg/probe/npm.go.
+	findings := scanReaderLines(ctx, "file:"+path, bytes.NewReader(content), p.Name(), p.detectorRegistry, int(p.maxFileSize)+1)
 
 	// YAML walk extracts base64-wrapped credentials that the line scan
 	// can't see — the user's inline client key is the high-value one.
@@ -211,7 +215,7 @@ func (p *KubeProbe) scanEncoded(
 	if encoded == "" {
 		return nil
 	}
-	decoded, err := base64.StdEncoding.DecodeString(strings.TrimSpace(encoded))
+	decoded, err := decodeBase64Loose(encoded)
 	if err != nil {
 		log.Ctx(ctx).Debug().
 			Err(err).
@@ -240,4 +244,26 @@ func (p *KubeProbe) scanEncoded(
 		found[i].Metadata["kubeconfig_field"] = field
 	}
 	return found
+}
+
+// decodeBase64Loose strips all whitespace from s and decodes it as
+// base64. YAML block scalars (`|` / `>`) and many hand-written
+// kubeconfigs wrap long base64 values across multiple lines, so
+// TrimSpace alone misses embedded newlines/tabs. Falls back to
+// RawStdEncoding because some emitters omit padding.
+func decodeBase64Loose(s string) ([]byte, error) {
+	cleaned := strings.Map(func(r rune) rune {
+		if unicode.IsSpace(r) {
+			return -1
+		}
+		return r
+	}, s)
+	if b, err := base64.StdEncoding.DecodeString(cleaned); err == nil {
+		return b, nil
+	}
+	b, err := base64.RawStdEncoding.DecodeString(cleaned)
+	if err != nil {
+		return nil, fmt.Errorf("base64 decode kubeconfig field: %w", err)
+	}
+	return b, nil
 }

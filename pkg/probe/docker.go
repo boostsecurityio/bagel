@@ -149,7 +149,10 @@ func (p *DockerProbe) findingFromAuth(
 		return nil
 	}
 
-	source := fmt.Sprintf("file:%s#auths.%s.auth", path, host)
+	// Bracket-and-quote notation so common registry keys
+	// (https://index.docker.io/v1/) — which contain dots, colons, and
+	// slashes — map back to auths[<key>].auth unambiguously.
+	source := fmt.Sprintf("file:%s#auths[%q].auth", path, host)
 	primary := models.Finding{
 		ID:          "docker-registry-inline-auth",
 		Type:        models.FindingTypeSecret,
@@ -204,7 +207,7 @@ func (p *DockerProbe) findingFromIdentityToken(
 	host string,
 	token string,
 ) []models.Finding {
-	source := fmt.Sprintf("file:%s#auths.%s.identitytoken", path, host)
+	source := fmt.Sprintf("file:%s#auths[%q].identitytoken", path, host)
 	primary := models.Finding{
 		ID:          "docker-registry-inline-identity-token",
 		Type:        models.FindingTypeSecret,
