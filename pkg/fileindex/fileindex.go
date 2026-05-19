@@ -153,14 +153,29 @@ func compilePattern(kind PatternType, pat string) patternMatcher {
 		// `.claude/commands/*.md` catch both `~/.claude/commands/foo.md`
 		// (home-level) and `~/projects/repo/.claude/commands/foo.md`
 		// (project-level) without forcing callers to enumerate depths.
-		needed := strings.Count(normalized, string(os.PathSeparator)) + 1
+		//
+		// Implemented as a reverse byte scan so the suffix is a slice
+		// of relPath — no allocation per call, which matters because
+		// BuildIndex invokes every matcher against every walked file.
+		sep := byte(os.PathSeparator)
+		seps := strings.Count(normalized, string(rune(sep)))
 		return func(_, relPath string) bool {
-			parts := strings.Split(relPath, string(os.PathSeparator))
-			if len(parts) < needed {
+			start := 0
+			seen := 0
+			for i := len(relPath) - 1; i >= 0; i-- {
+				if relPath[i] != sep {
+					continue
+				}
+				seen++
+				if seen > seps {
+					start = i + 1
+					break
+				}
+			}
+			if seen < seps {
 				return false
 			}
-			suffix := strings.Join(parts[len(parts)-needed:], string(os.PathSeparator))
-			matched, _ := filepath.Match(normalized, suffix)
+			matched, _ := filepath.Match(normalized, relPath[start:])
 			return matched
 		}
 	default:

@@ -64,20 +64,20 @@ func (p *ContextProbe) SetFileIndex(index *fileindex.FileIndex) {
 }
 
 // aiContextPatterns lists every file-index pattern whose matches hold
-// AI agent user-authored context. Memory files (CLAUDE.md / AGENTS.md)
-// are basename-globbed so they catch every project; command/agent/
-// skill/instruction patterns are user-level (~/.claude, ~/.codex,
-// ~/.agents) because the file index doesn't support `**` globs and
-// project-level versions would need that.
+// AI agent user-authored context. All of these are suffix-matched by
+// the file index, so each pattern catches both the user-level
+// installation (~/.claude, ~/.codex, ~/.agents) and project-level
+// equivalents at any depth — e.g. `.claude/commands/*.md` matches both
+// `~/.claude/commands/foo.md` and `~/repo/.claude/commands/foo.md`.
 var aiContextPatterns = []string{
-	"ai_memory_md",       // CLAUDE.md / AGENTS.md anywhere under home
-	"claude_commands",    // ~/.claude/commands/*.md
-	"claude_agents",      // ~/.claude/agents/*.md
-	"claude_skills",      // ~/.claude/skills/*/*.md
-	"agents_skills",      // ~/.agents/skills/*/*.md (cross-agent convention)
-	"codex_instructions", // ~/.codex/instructions.md
-	"codex_memories",     // ~/.codex/memories/*
-	"codex_skills",       // ~/.codex/skills/*/*.md
+	"ai_memory_md",       // CLAUDE.md / AGENTS.md (basename, any depth)
+	"claude_commands",    // .claude/commands/*.md (user + project)
+	"claude_agents",      // .claude/agents/*.md   (user + project)
+	"claude_skills",      // .claude/skills/*/*.md (user + project)
+	"agents_skills",      // .agents/skills/*/*.md (cross-agent convention)
+	"codex_instructions", // .codex/instructions.md
+	"codex_memories",     // .codex/memories/*
+	"codex_skills",       // .codex/skills/*/*.md
 }
 
 // Execute walks every indexed context/memory file and line-scans them

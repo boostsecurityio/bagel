@@ -157,16 +157,23 @@ func (p *MCPProbe) processConfig(ctx context.Context, path string) []models.Find
 
 // scanServerEnv feeds every env value (and the legacy envVars map)
 // through the detector registry. Each detected credential carries
-// metadata locating it back to mcpServers["<name>"].env["<key>"] so
-// users can find and rotate it.
+// metadata locating it back to mcpServers["<name>"].<map>["<key>"] —
+// preserving which map (env vs envVars) the value came from, so users
+// rotate the right key.
 func (p *MCPProbe) scanServerEnv(path, serverName string, server mcpServerEntry) []models.Finding {
 	var findings []models.Finding
-	for _, envMap := range []map[string]string{server.Env, server.EnvVars} {
-		for envKey, envVal := range envMap {
+	for _, src := range []struct {
+		mapKey string
+		envMap map[string]string
+	}{
+		{"env", server.Env},
+		{"envVars", server.EnvVars},
+	} {
+		for envKey, envVal := range src.envMap {
 			if envVal == "" {
 				continue
 			}
-			location := fmt.Sprintf("mcpServers[%q].env[%q]", serverName, envKey)
+			location := fmt.Sprintf("mcpServers[%q].%s[%q]", serverName, src.mapKey, envKey)
 			detCtx := models.NewDetectionContext(models.NewDetectionContextInput{
 				Source:    "file:" + path,
 				ProbeName: p.Name(),
@@ -180,22 +187,61 @@ func (p *MCPProbe) scanServerEnv(path, serverName string, server mcpServerEntry)
 	return findings
 }
 
+// pkgRunners are the command names whose first non-flag arg is the
+// package identifier itself (e.g. `npx -y @scope/pkg ...`). We skip
+// that one arg through the registry because scope/package names look
+// suspicious to the generic-api-key detector.
+var pkgRunners = map[string]struct{}{
+	"npx":  {},
+	"bunx": {},
+	"uvx":  {},
+}
+
+// looksLikePackageIdent is a deliberately tight guard: we only skip an
+// arg if it's clearly a scoped npm package (`@scope/name[@version]`),
+// which is the dominant MCP-server publishing shape today. Unscoped
+// names ("mcp-server-foo") are short and low-entropy enough that
+// downstream detectors don't false-positive on them — and skipping
+// would risk silently dropping a real credential that happens to land
+// at the first non-flag arg.
+func looksLikePackageIdent(s string) bool {
+	if !strings.HasPrefix(s, "@") || !strings.Contains(s, "/") {
+		return false
+	}
+	// The slash must come after the scope, not at the end.
+	slash := strings.IndexByte(s, '/')
+	if slash <= 1 || slash == len(s)-1 {
+		return false
+	}
+	return true
+}
+
 // scanServerArgs feeds args strings through the registry. Some MCP
 // packages take the credential on the command line (e.g.
 // `npx -y @vendor/server --api-key XYZ`), so this catches the case
 // where the env-map path doesn't.
 func (p *MCPProbe) scanServerArgs(path, serverName string, server mcpServerEntry) []models.Finding {
 	var findings []models.Finding
-	for i, arg := range server.Args {
-		if arg == "" {
-			continue
+
+	// Compute the index of the first non-flag arg up front so the loop
+	// body stays a single pass. For pkgRunner commands, that arg is the
+	// package identifier and we skip it (only if it actually looks like
+	// one — otherwise we'd silently drop a real credential).
+	skipIdx := -1
+	if _, isRunner := pkgRunners[server.Command]; isRunner {
+		for i, a := range server.Args {
+			if strings.HasPrefix(a, "-") {
+				continue
+			}
+			if looksLikePackageIdent(a) {
+				skipIdx = i
+			}
+			break
 		}
-		// Skip the package name itself — it's the first non-flag arg
-		// of `npx`/`bunx` invocations and produces noise via the
-		// generic-api-key detector when packages have hash-like names.
-		// We still feed it to the registry if it doesn't look like a
-		// bare scope/package identifier.
-		if i == 0 && (server.Command == "npx" || server.Command == "bunx" || server.Command == "uvx") {
+	}
+
+	for i, arg := range server.Args {
+		if arg == "" || i == skipIdx {
 			continue
 		}
 		location := fmt.Sprintf("mcpServers[%q].args[%d]", serverName, i)

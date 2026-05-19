@@ -131,6 +131,66 @@ func TestMCPProbe_SkipsPackageNameFirstArg(t *testing.T) {
 	assert.Empty(t, findings, "no credential present — must not emit findings")
 }
 
+func TestMCPProbe_SkipsPackageNameAfterFlags(t *testing.T) {
+	// The canonical npx invocation is `npx -y @scope/pkg ...` — args[0]
+	// is `-y`, args[1] is the package. Skipping only args[0] would feed
+	// the package name to the generic-api-key detector. The fix is to
+	// skip the first non-flag arg, which here is index 1.
+	tmpDir := t.TempDir()
+	path := writeMCPConfig(t, tmpDir, ".mcp.json", `{
+  "mcpServers": {
+    "fs": {
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-filesystem", "/some/path"]
+    }
+  }
+}`)
+
+	idx := fileindex.NewFileIndex()
+	idx.Add("mcp_project_config", path)
+
+	probe := NewMCPProbe(models.ProbeSettings{Enabled: true}, newMCPRegistry())
+	probe.SetFileIndex(idx)
+
+	findings, err := probe.Execute(context.Background())
+	require.NoError(t, err)
+	assert.Empty(t, findings, "package identifier at args[1] (after -y) must be skipped")
+}
+
+func TestMCPProbe_DoesNotSkipFirstArgWhenItIsNotAPackageIdent(t *testing.T) {
+	// Defensive: if the first non-flag arg looks like a credential
+	// (e.g. someone wired their token at the start of the args list),
+	// don't silently swallow it just because the command is npx.
+	tmpDir := t.TempDir()
+	pat := "ghp_" + "0123456789abcdefghijABCDEFGHIJ012345"
+	path := writeMCPConfig(t, tmpDir, ".mcp.json", `{
+  "mcpServers": {
+    "weird": {
+      "command": "npx",
+      "args": ["`+pat+`", "/some/path"]
+    }
+  }
+}`)
+
+	idx := fileindex.NewFileIndex()
+	idx.Add("mcp_project_config", path)
+
+	probe := NewMCPProbe(models.ProbeSettings{Enabled: true}, newMCPRegistry())
+	probe.SetFileIndex(idx)
+
+	findings, err := probe.Execute(context.Background())
+	require.NoError(t, err)
+
+	hasPAT := false
+	for _, f := range findings {
+		if f.Metadata["token_type"] == "classic-pat" {
+			hasPAT = true
+			break
+		}
+	}
+	assert.True(t, hasPAT, "PAT-shaped first arg must not be skipped")
+}
+
 func TestMCPProbe_HandlesLegacyEnvVarsKey(t *testing.T) {
 	tmpDir := t.TempDir()
 	pat := "ghp_" + "9876543210zyxwvutsrqponmlkjihgfedcba"
@@ -159,6 +219,12 @@ func TestMCPProbe_HandlesLegacyEnvVarsKey(t *testing.T) {
 		if f.Metadata["token_type"] == "classic-pat" {
 			hasPAT = true
 			assert.Equal(t, "GITHUB_TOKEN", f.Metadata["env_var"])
+			// Location must reflect the actual source map — the legacy
+			// `envVars` key — not `env`, or users will rotate the
+			// wrong path.
+			assert.Contains(t, f.Metadata["location"],
+				`mcpServers["legacy"].envVars["GITHUB_TOKEN"]`,
+				"legacy envVars findings must be attributed to envVars[…], not env[…]")
 		}
 	}
 	assert.True(t, hasPAT)
