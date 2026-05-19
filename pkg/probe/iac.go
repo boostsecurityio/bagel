@@ -264,7 +264,7 @@ func (p *IaCProbe) processHelmRepositories(ctx context.Context, path string) []m
 				"repo_url":         r.URL,
 				"username":         r.Username,
 				"username_present": r.Username != "",
-				"location":         fmt.Sprintf("repositories[%s]", r.Name),
+				"location":         fmt.Sprintf("repositories[%q]", r.Name),
 			},
 		})
 	}
