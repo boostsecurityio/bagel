@@ -7,7 +7,9 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"strconv"
 	"testing"
+	"time"
 
 	"github.com/boostsecurityio/bagel/pkg/detector"
 	"github.com/boostsecurityio/bagel/pkg/fileindex"
@@ -343,4 +345,249 @@ func TestCloudProbe_UnreadableFile(t *testing.T) {
 	require.NoError(t, err)
 	// Note: depending on permissions, we might get findings or not
 	// The key is that it doesn't crash
+}
+
+// Phase D-1: cloud / SaaS CLI round-up. The probe consumes a single
+// shared pattern slice (cloudCredentialPatterns); these tests lock
+// in the slice membership by inserting one credential-bearing file
+// per vendor pattern and asserting the registry picks it up.
+
+func newD1Registry() *detector.Registry {
+	r := detector.NewRegistry()
+	r.Register(detector.NewCloudCredentialsDetector())
+	r.Register(detector.NewJWTDetector())
+	r.Register(detector.NewGitHubPATDetector())
+	r.Register(detector.NewGenericAPIKeyDetector())
+	return r
+}
+
+func TestCloudProbe_AWS_SSO_Cache(t *testing.T) {
+	tmpDir := t.TempDir()
+	path := filepath.Join(tmpDir, "11aabbccdd.json")
+	// Realistic SSO cache shape: accessToken is the secret, the rest is metadata.
+	require.NoError(t, os.WriteFile(path, []byte(`{
+"startUrl":"https://example.awsapps.com/start",
+"accessToken":"aoatJ.veryLongSSOAccessTokenWithEnoughCharsToHitGenericKeyDetector",
+"expiresAt":"2099-01-01T00:00:00Z"
+}`), 0600))
+
+	idx := fileindex.NewFileIndex()
+	idx.Add("aws_sso_cache", path)
+
+	probe := NewCloudProbe(models.ProbeSettings{Enabled: true}, newD1Registry())
+	probe.SetFileIndex(idx)
+
+	findings, err := probe.Execute(context.Background())
+	require.NoError(t, err)
+	require.NotEmpty(t, findings, "SSO cache accessToken must be picked up by the registry")
+}
+
+func TestCloudProbe_Azure_Tokens(t *testing.T) {
+	tmpDir := t.TempDir()
+	path := filepath.Join(tmpDir, "accessTokens.json")
+	// Single-line JWT in a JSON value — JWT detector must fire.
+	pat := "eyJhbGciOiJSUzI1NiJ9.eyJpc3MiOiJodHRwczovL3N0cy53aW5kb3dzLm5ldC9hYWFhYWFhYS1hYWFhLWFhYWEtYWFhYS1hYWFhYWFhYWFhYWEvIn0.signaturepartlongenoughtomatch"
+	require.NoError(t, os.WriteFile(path, []byte(`[{"accessToken":"`+pat+`"}]`), 0600))
+
+	idx := fileindex.NewFileIndex()
+	idx.Add("azure_tokens", path)
+
+	probe := NewCloudProbe(models.ProbeSettings{Enabled: true}, newD1Registry())
+	probe.SetFileIndex(idx)
+
+	findings, err := probe.Execute(context.Background())
+	require.NoError(t, err)
+	require.NotEmpty(t, findings)
+	// JWT subtype enrichment should classify it as Azure AD.
+	hasAzure := false
+	for _, f := range findings {
+		if f.Metadata["token_subtype"] == "jwt-azure-ad" {
+			hasAzure = true
+		}
+	}
+	assert.True(t, hasAzure, "Azure AD JWT subtype must be set on the finding")
+}
+
+func TestCloudProbe_VendorCLIs_AllPatternsHit(t *testing.T) {
+	tmpDir := t.TempDir()
+	// One credential-bearing file per single-vendor pattern. Body uses
+	// an AWS-shaped access key — the most universally-recognized secret
+	// shape — so we don't depend on per-vendor detectors that don't
+	// exist yet. The point is that the file is reached and scanned.
+	akia := "AKIAIOSFODNN7EXAMPLE"
+	cases := []struct {
+		pattern string
+		body    string
+	}{
+		{"oci_config", "[DEFAULT]\nkey=" + akia + "\n"},
+		{"aliyun_config", `{"profiles":[{"access_key_id":"` + akia + `"}]}`},
+		{"bluemix_config", `{"IAMToken":"` + akia + `"}`},
+		{"doctl_config", "access-token: " + akia + "\n"},
+		{"hcloud_config", "token = \"" + akia + "\"\n"},
+		{"scw_config", "secret_key: " + akia + "\n"},
+		{"linode_config", "token=" + akia + "\n"},
+		{"fly_config", "access_token: " + akia + "\n"},
+		{"vercel_config", `{"token":"` + akia + `"}`},
+		{"railway_config", `{"token":"` + akia + `"}`},
+		{"snowflake_config", "password = \"" + akia + "\"\n"},
+		{"doppler_config", "token: " + akia + "\n"},
+	}
+
+	idx := fileindex.NewFileIndex()
+	for i, c := range cases {
+		path := filepath.Join(tmpDir, c.pattern+strconv.Itoa(i))
+		require.NoError(t, os.WriteFile(path, []byte(c.body), 0600))
+		idx.Add(c.pattern, path)
+	}
+
+	probe := NewCloudProbe(models.ProbeSettings{Enabled: true}, newD1Registry())
+	probe.SetFileIndex(idx)
+
+	findings, err := probe.Execute(context.Background())
+	require.NoError(t, err)
+
+	hit := 0
+	for _, f := range findings {
+		if f.ID == "cloud-credential-aws-access-key-id" {
+			hit++
+		}
+	}
+	assert.Equal(t, len(cases), hit,
+		"each vendor pattern must produce at least one cloud-credential finding (got %d of %d)",
+		hit, len(cases))
+}
+
+// Expired AWS SSO / CLI cache files are the dominant source of false
+// positives for those two patterns — the files sit on disk long after
+// the embedded credential is dead. The probe pre-checks expiry and
+// skips dead files entirely; these tests lock that behavior in.
+
+func TestCloudProbe_AWS_CLI_Cache_Expired_Skipped(t *testing.T) {
+	tmpDir := t.TempDir()
+	path := filepath.Join(tmpDir, "expired.json")
+	// 16 months ago — well past any reasonable session lifetime.
+	require.NoError(t, os.WriteFile(path, []byte(`{
+"Credentials": {
+  "AccessKeyId": "ASIAIOSFODNN7EXAMPLE",
+  "SecretAccessKey": "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY",
+  "SessionToken": "IQoJb3JpZ2luX2VjStillExampleNoLongerValid",
+  "Expiration": "2025-01-21T09:42:24Z"
+}}`), 0600))
+
+	idx := fileindex.NewFileIndex()
+	idx.Add("aws_cli_cache", path)
+
+	probe := NewCloudProbe(models.ProbeSettings{Enabled: true}, newD1Registry())
+	probe.SetFileIndex(idx)
+
+	findings, err := probe.Execute(context.Background())
+	require.NoError(t, err)
+	assert.Empty(t, findings, "expired CLI cache must not produce findings")
+}
+
+func TestCloudProbe_AWS_CLI_Cache_Fresh_Reported(t *testing.T) {
+	tmpDir := t.TempDir()
+	path := filepath.Join(tmpDir, "fresh.json")
+	future := time.Now().UTC().Add(time.Hour).Format(time.RFC3339)
+	require.NoError(t, os.WriteFile(path, []byte(`{
+"Credentials": {
+  "AccessKeyId": "ASIAIOSFODNN7EXAMPLE",
+  "SecretAccessKey": "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY",
+  "Expiration": "`+future+`"
+}}`), 0600))
+
+	idx := fileindex.NewFileIndex()
+	idx.Add("aws_cli_cache", path)
+
+	probe := NewCloudProbe(models.ProbeSettings{Enabled: true}, newD1Registry())
+	probe.SetFileIndex(idx)
+
+	findings, err := probe.Execute(context.Background())
+	require.NoError(t, err)
+	assert.NotEmpty(t, findings, "live CLI cache must be reported")
+}
+
+func TestCloudProbe_AWS_SSO_Cache_Expired_Skipped(t *testing.T) {
+	tmpDir := t.TempDir()
+	path := filepath.Join(tmpDir, "sso-expired.json")
+	require.NoError(t, os.WriteFile(path, []byte(`{
+"startUrl":"https://example.awsapps.com/start",
+"accessToken":"aoatJ.veryLongSSOAccessTokenWithEnoughCharsToHitGenericKeyDetector",
+"expiresAt":"2025-01-01T00:00:00Z"
+}`), 0600))
+
+	idx := fileindex.NewFileIndex()
+	idx.Add("aws_sso_cache", path)
+
+	probe := NewCloudProbe(models.ProbeSettings{Enabled: true}, newD1Registry())
+	probe.SetFileIndex(idx)
+
+	findings, err := probe.Execute(context.Background())
+	require.NoError(t, err)
+	assert.Empty(t, findings, "expired SSO cache must not produce findings")
+}
+
+func TestCloudProbe_AWS_SSO_Cache_Fresh_Reported(t *testing.T) {
+	tmpDir := t.TempDir()
+	path := filepath.Join(tmpDir, "sso-fresh.json")
+	future := time.Now().UTC().Add(time.Hour).Format(time.RFC3339)
+	require.NoError(t, os.WriteFile(path, []byte(`{
+"startUrl":"https://example.awsapps.com/start",
+"accessToken":"aoatJ.veryLongSSOAccessTokenWithEnoughCharsToHitGenericKeyDetector",
+"expiresAt":"`+future+`"
+}`), 0600))
+
+	idx := fileindex.NewFileIndex()
+	idx.Add("aws_sso_cache", path)
+
+	probe := NewCloudProbe(models.ProbeSettings{Enabled: true}, newD1Registry())
+	probe.SetFileIndex(idx)
+
+	findings, err := probe.Execute(context.Background())
+	require.NoError(t, err)
+	assert.NotEmpty(t, findings, "live SSO cache must be reported")
+}
+
+func TestCloudProbe_AWS_Cache_MalformedFile_StillScanned(t *testing.T) {
+	// When we can't tell whether the cache is expired (bad JSON, missing
+	// expiry field, etc.) we err toward reporting — better a noisy
+	// finding the user can dismiss than silently dropping a live token.
+	tmpDir := t.TempDir()
+	path := filepath.Join(tmpDir, "malformed.json")
+	require.NoError(t, os.WriteFile(path,
+		[]byte(`AccessKeyId=AKIAIOSFODNN7EXAMPLE`), 0600))
+
+	idx := fileindex.NewFileIndex()
+	idx.Add("aws_cli_cache", path)
+
+	probe := NewCloudProbe(models.ProbeSettings{Enabled: true}, newD1Registry())
+	probe.SetFileIndex(idx)
+
+	findings, err := probe.Execute(context.Background())
+	require.NoError(t, err)
+	assert.NotEmpty(t, findings, "malformed cache file must still be scanned")
+}
+
+func TestCloudProbe_DeduplicatesPathsAcrossPatterns(t *testing.T) {
+	tmpDir := t.TempDir()
+	path := filepath.Join(tmpDir, "shared")
+	require.NoError(t, os.WriteFile(path, []byte("key=AKIAIOSFODNN7EXAMPLE\n"), 0600))
+
+	idx := fileindex.NewFileIndex()
+	idx.Add("aws_credentials", path)
+	idx.Add("oci_config", path) // same path under two patterns
+
+	probe := NewCloudProbe(models.ProbeSettings{Enabled: true}, newD1Registry())
+	probe.SetFileIndex(idx)
+
+	findings, err := probe.Execute(context.Background())
+	require.NoError(t, err)
+
+	hit := 0
+	for _, f := range findings {
+		if f.ID == "cloud-credential-aws-access-key-id" {
+			hit++
+		}
+	}
+	assert.Equal(t, 1, hit, "same path indexed under multiple patterns must be scanned once")
 }

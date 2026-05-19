@@ -5,7 +5,9 @@ package probe
 
 import (
 	"context"
+	"encoding/json"
 	"os"
+	"time"
 
 	"github.com/boostsecurityio/bagel/pkg/detector"
 	"github.com/boostsecurityio/bagel/pkg/fileindex"
@@ -50,6 +52,41 @@ func (p *CloudProbe) SetFileIndex(index *fileindex.FileIndex) {
 	p.fileIndex = index
 }
 
+// cloudCredentialPatterns lists every file-index pattern whose matches
+// hold cloud-provider or SaaS-CLI credentials.
+var cloudCredentialPatterns = []string{
+	// AWS
+	"aws_config",
+	"aws_credentials",
+	"aws_sso_cache",
+	"aws_cli_cache",
+
+	// Azure
+	"azure_config",
+	"azure_tokens",
+
+	// GCP
+	"gcp_config",
+	"gcp_credentials",
+
+	// HashiCorp Vault
+	"vault_token",
+
+	// Single-vendor cloud / SaaS CLIs (Phase D-1).
+	"oci_config",
+	"aliyun_config",
+	"bluemix_config",
+	"doctl_config",
+	"hcloud_config",
+	"scw_config",
+	"linode_config",
+	"fly_config",
+	"vercel_config",
+	"railway_config",
+	"snowflake_config",
+	"doppler_config",
+}
+
 // Execute runs the cloud probe
 func (p *CloudProbe) Execute(ctx context.Context) ([]models.Finding, error) {
 	var findings []models.Finding
@@ -62,55 +99,31 @@ func (p *CloudProbe) Execute(ctx context.Context) ([]models.Finding, error) {
 		return findings, nil
 	}
 
-	// Get cloud credential files from file index
-	awsConfig := p.fileIndex.Get("aws_config")
-	awsCredentials := p.fileIndex.Get("aws_credentials")
-	gcpConfig := p.fileIndex.Get("gcp_config")
-	gcpCredentials := p.fileIndex.Get("gcp_credentials")
-	azureConfig := p.fileIndex.Get("azure_config")
-
-	vaultTokenFiles := p.fileIndex.Get("vault_token")
+	seen := make(map[string]struct{})
+	for _, pattern := range cloudCredentialPatterns {
+		for _, filePath := range p.fileIndex.Get(pattern) {
+			if _, dup := seen[filePath]; dup {
+				continue
+			}
+			seen[filePath] = struct{}{}
+			// AWS SSO + CLI caches are rewritten on each `aws sso
+			// login` / `aws sts assume-role` and old files linger on
+			// disk indefinitely. Skip when the embedded expiry has
+			// passed so we don't surface dead credentials as findings.
+			if isAWSCachePattern(pattern) && awsCacheExpired(filePath) {
+				log.Ctx(ctx).Debug().
+					Str("file", filePath).
+					Str("pattern", pattern).
+					Msg("Skipping expired AWS credential cache")
+				continue
+			}
+			findings = append(findings, p.processCloudFile(ctx, filePath)...)
+		}
+	}
 
 	log.Ctx(ctx).Debug().
-		Int("aws_config_count", len(awsConfig)).
-		Int("aws_credentials_count", len(awsCredentials)).
-		Int("gcp_config_count", len(gcpConfig)).
-		Int("gcp_credentials_count", len(gcpCredentials)).
-		Int("azure_config_count", len(azureConfig)).
-		Int("vault_token_count", len(vaultTokenFiles)).
-		Msg("Found cloud credential files")
-
-	// Process AWS files
-	for _, filePath := range awsConfig {
-		fileFindings := p.processCloudFile(ctx, filePath)
-		findings = append(findings, fileFindings...)
-	}
-	for _, filePath := range awsCredentials {
-		fileFindings := p.processCloudFile(ctx, filePath)
-		findings = append(findings, fileFindings...)
-	}
-
-	// Process GCP files
-	for _, filePath := range gcpConfig {
-		fileFindings := p.processCloudFile(ctx, filePath)
-		findings = append(findings, fileFindings...)
-	}
-	for _, filePath := range gcpCredentials {
-		fileFindings := p.processCloudFile(ctx, filePath)
-		findings = append(findings, fileFindings...)
-	}
-
-	// Process Azure files
-	for _, filePath := range azureConfig {
-		fileFindings := p.processCloudFile(ctx, filePath)
-		findings = append(findings, fileFindings...)
-	}
-
-	// Process Vault token file
-	for _, filePath := range vaultTokenFiles {
-		fileFindings := p.processCloudFile(ctx, filePath)
-		findings = append(findings, fileFindings...)
-	}
+		Int("cloud_files_scanned", len(seen)).
+		Msg("Cloud probe completed")
 
 	// Check for Kubernetes service account token (system path, outside home dir)
 	findings = append(findings, p.checkK8sServiceAccountToken(ctx)...)
@@ -155,4 +168,59 @@ func (p *CloudProbe) checkK8sServiceAccountToken(ctx context.Context) []models.F
 // works for both and lets findings carry a line number.
 func (p *CloudProbe) processCloudFile(ctx context.Context, filePath string) []models.Finding {
 	return scanFileLines(ctx, filePath, p.Name(), p.detectorRegistry, 0)
+}
+
+// isAWSCachePattern returns true for the two AWS file-index patterns
+// whose contents are credential caches with an embedded expiry.
+func isAWSCachePattern(pattern string) bool {
+	return pattern == "aws_sso_cache" || pattern == "aws_cli_cache"
+}
+
+// awsCacheExpiryGrace covers clock skew between the local machine and
+// AWS at the moment the cache was written. Keeping the grace small
+// avoids re-reporting almost-expired tokens; one minute is enough to
+// absorb realistic skew without making us report dead tokens for long.
+const awsCacheExpiryGrace = time.Minute
+
+// awsCacheExpired returns true when the AWS SSO or CLI cache file at
+// path has already passed its embedded expiry. The CLI cache wraps
+// credentials in `{"Credentials":{"Expiration":"<rfc3339>"}}` (sts
+// assume-role / get-credentials shape); the SSO cache uses a
+// top-level `expiresAt`. Either field signals when the cached token
+// stops authenticating.
+//
+// We err toward reporting on any parse / read / time-format error:
+// when we can't tell whether the cache is dead, we still surface it.
+// This keeps the false-negative rate low while killing the dominant
+// false-positive source (long-stale caches sitting on disk).
+func awsCacheExpired(path string) bool {
+	content, err := os.ReadFile(path)
+	if err != nil {
+		return false
+	}
+	var doc struct {
+		// AWS CLI cache (sts assume-role output / GetSessionToken).
+		Credentials *struct {
+			Expiration string `json:"Expiration"`
+		} `json:"Credentials"`
+		// AWS SSO cache.
+		ExpiresAt string `json:"expiresAt"`
+	}
+	if err := json.Unmarshal(content, &doc); err != nil {
+		return false
+	}
+	expiryStr := ""
+	switch {
+	case doc.Credentials != nil && doc.Credentials.Expiration != "":
+		expiryStr = doc.Credentials.Expiration
+	case doc.ExpiresAt != "":
+		expiryStr = doc.ExpiresAt
+	default:
+		return false
+	}
+	t, err := time.Parse(time.RFC3339, expiryStr)
+	if err != nil {
+		return false
+	}
+	return time.Now().UTC().After(t.Add(awsCacheExpiryGrace))
 }
