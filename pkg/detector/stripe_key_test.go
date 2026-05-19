@@ -41,12 +41,22 @@ func TestStripeKeyDetector_Detect(t *testing.T) {
 			wantCount: 1,
 		},
 		{
-			name:      "live restricted key",
+			name: "live restricted key (kind preserved, ID grouped with secret " +
+				"for filter convenience)",
 			content:   "key=rk_live_abcdefghijklmnopqrstuvwx",
 			wantID:    "stripe-secret-key",
-			wantKind:  "secret",
+			wantKind:  "restricted",
 			wantEnv:   "live",
 			wantSev:   "critical",
+			wantCount: 1,
+		},
+		{
+			name:      "test restricted key",
+			content:   "key=rk_test_abcdefghijklmnopqrstuvwx",
+			wantID:    "stripe-secret-key",
+			wantKind:  "restricted",
+			wantEnv:   "test",
+			wantSev:   "high",
 			wantCount: 1,
 		},
 		{

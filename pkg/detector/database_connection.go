@@ -24,8 +24,10 @@ type DatabaseConnectionDetector struct {
 // for the database/queue schemes most commonly seen in dev configs.
 // The userinfo half allows an empty username (e.g. redis://:pw@host) but
 // requires a non-empty password — that's the bit that makes it a credential.
+// Case-insensitive because URL schemes are case-insensitive per RFC 3986
+// (e.g. POSTGRES://… is valid).
 var dbConnectionRegex = regexp.MustCompile(
-	`\b(postgres(?:ql)?|mysql|mariadb|mongodb(?:\+srv)?|rediss?|amqps?|clickhouse|mssql)://` +
+	`(?i)\b(postgres(?:ql)?|mysql|mariadb|mongodb(?:\+srv)?|rediss?|amqps?|clickhouse|mssql)://` +
 		`([^:@/\s"'<>]*):([^@/\s"'<>]+)@` +
 		`([^/\s"'<>?#]+)`,
 )
@@ -41,11 +43,11 @@ func NewDatabaseConnectionDetector() *DatabaseConnectionDetector {
 				Regex:       dbConnectionRegex,
 				Replacement: `${1}://${2}:[REDACTED-db-credential]@${4}`,
 				Label:       "REDACTED-db-credential",
-				Prefixes: []string{
-					"postgres://", "postgresql://", "mysql://", "mariadb://",
-					"mongodb://", "mongodb+srv://", "redis://", "rediss://",
-					"amqp://", "amqps://", "clickhouse://", "mssql://",
-				},
+				// `://` works as a case-insensitive fast-path gate for
+				// every supported scheme; enumerating each lowercase
+				// scheme would miss uppercase/mixed-case variants the
+				// regex above happily detects.
+				Prefixes: []string{"://"},
 			},
 		},
 	}

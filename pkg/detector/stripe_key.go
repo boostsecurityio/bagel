@@ -76,9 +76,14 @@ func (d *StripeKeyDetector) Detect(
 	findings := make([]models.Finding, 0, 4)
 	seen := make(map[string]bool)
 
+	// kind is the human-readable variant label ("secret" / "restricted"
+	// / "publishable"). It's tracked explicitly so the message/metadata
+	// reflect the actual key family — secret and restricted share a
+	// finding ID for filter convenience, so we can't derive kind from ID.
 	type variant struct {
 		pattern    *regexp.Regexp
 		id         string
+		kind       string
 		title      string
 		descPrefix string
 		liveSev    string
@@ -88,6 +93,7 @@ func (d *StripeKeyDetector) Detect(
 		{
 			pattern:    d.secretPattern,
 			id:         "stripe-secret-key",
+			kind:       "secret",
 			title:      "Stripe Secret Key Detected",
 			descPrefix: "Stripe secret key — full API access to the Stripe account.",
 			liveSev:    "critical",
@@ -96,6 +102,7 @@ func (d *StripeKeyDetector) Detect(
 		{
 			pattern:    d.restrictedPattern,
 			id:         "stripe-secret-key",
+			kind:       "restricted",
 			title:      "Stripe Restricted Key Detected",
 			descPrefix: "Stripe restricted key — scoped API access set in the dashboard.",
 			liveSev:    "critical",
@@ -104,6 +111,7 @@ func (d *StripeKeyDetector) Detect(
 		{
 			pattern: d.publishablePattern,
 			id:      "stripe-publishable-key",
+			kind:    "publishable",
 			title:   "Stripe Publishable Key Detected",
 			descPrefix: "Stripe publishable key — designed to ship in client-side code, " +
 				"so not strictly a secret, but a leak can enable fraudulent Checkout/Element use.",
@@ -133,11 +141,11 @@ func (d *StripeKeyDetector) Detect(
 				Severity:    severity,
 				Title:       v.title,
 				Description: v.descPrefix + " Rotate the key from the Stripe dashboard.",
-				Message:     fmt.Sprintf("A Stripe %s key (%s mode) was detected in %s.", keyKind(v.id), env, ctx.FormatSource()),
+				Message:     fmt.Sprintf("A Stripe %s key (%s mode) was detected in %s.", v.kind, env, ctx.FormatSource()),
 				Path:        ctx.Source,
 				Metadata: map[string]interface{}{
 					"detector_name": d.Name(),
-					"key_kind":      keyKind(v.id),
+					"key_kind":      v.kind,
 					"environment":   env,
 				},
 			})
@@ -150,14 +158,4 @@ func (d *StripeKeyDetector) Detect(
 // Publishable keys are intentionally left alone.
 func (d *StripeKeyDetector) Redact(content string) (string, map[string]int) {
 	return ApplyRedactPatterns(content, d.redactPatterns)
-}
-
-// keyKind returns the human-readable kind ("secret"/"restricted"/
-// "publishable") corresponding to a finding ID. Used in messages and
-// metadata for at-a-glance triage.
-func keyKind(findingID string) string {
-	if findingID == "stripe-publishable-key" {
-		return "publishable"
-	}
-	return "secret"
 }

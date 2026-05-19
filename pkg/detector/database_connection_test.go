@@ -100,6 +100,20 @@ db2=mysql://c:d@h2/e`,
 			content:   `postgres://a:b@h/d postgres://a:b@h/d`,
 			wantCount: 1,
 		},
+		{
+			name:       "uppercase scheme is detected (RFC 3986 schemes are case-insensitive)",
+			content:    `DATABASE_URL=POSTGRES://alice:hunter2@db.example.com:5432/app`,
+			wantCount:  1,
+			wantScheme: "postgres",
+			wantHost:   "db.example.com:5432",
+		},
+		{
+			name:       "mixed-case scheme is detected and scheme metadata is normalized",
+			content:    `MySQL://root:rootpw@localhost:3306/mydb`,
+			wantCount:  1,
+			wantScheme: "mysql",
+			wantHost:   "localhost:3306",
+		},
 	}
 
 	for _, tt := range tests {
@@ -143,6 +157,12 @@ func TestDatabaseConnectionDetector_Redact(t *testing.T) {
 			input:   "postgres://localhost/db",
 			want:    "postgres://localhost/db",
 			wantHit: false,
+		},
+		{
+			name:    "uppercase scheme is redacted too",
+			input:   "DB=POSTGRES://alice:hunter2@db.example.com:5432/app",
+			want:    "DB=POSTGRES://alice:[REDACTED-db-credential]@db.example.com:5432/app",
+			wantHit: true,
 		},
 	}
 
