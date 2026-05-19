@@ -236,6 +236,10 @@ func setDefaults(v *viper.Viper) {
 		{"name": "railway_config", "patterns": []string{".railway/config.json"}, "type": "glob"},
 		{"name": "snowflake_config", "patterns": []string{".snowflake/connections.toml"}, "type": "glob"},
 		{"name": "doppler_config", "patterns": []string{".doppler.yaml"}, "type": "glob"},
+		{"name": "gh_hosts", "patterns": []string{".config/gh/hosts.yml"}, "type": "glob"},
+		{"name": "glab_config", "patterns": []string{".config/glab-cli/config.yml"}, "type": "glob"},
+		{"name": "hub_config", "patterns": []string{".config/hub"}, "type": "glob"},
+		{"name": "netrc_file", "patterns": []string{".netrc", "_netrc"}, "type": "glob"},
 
 		// Docker
 		{"name": "docker_config", "patterns": []string{".docker/config.json"}, "type": "glob"},

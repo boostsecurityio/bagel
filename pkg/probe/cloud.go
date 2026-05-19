@@ -15,7 +15,8 @@ import (
 	"github.com/rs/zerolog/log"
 )
 
-// CloudProbe checks cloud provider credential files
+// CloudProbe scans cloud provider, SaaS CLI, and code-forge auth
+// files for embedded credentials.
 type CloudProbe struct {
 	enabled          bool
 	config           models.ProbeSettings
@@ -85,6 +86,10 @@ var cloudCredentialPatterns = []string{
 	"railway_config",
 	"snowflake_config",
 	"doppler_config",
+	"gh_hosts",
+	"glab_config",
+	"hub_config",
+	"netrc_file",
 }
 
 // Execute runs the cloud probe

@@ -568,6 +568,111 @@ func TestCloudProbe_AWS_Cache_MalformedFile_StillScanned(t *testing.T) {
 	assert.NotEmpty(t, findings, "malformed cache file must still be scanned")
 }
 
+// Phase D-2: code-forge CLI auth files + .netrc. These follow the same
+// "scan home-dir credential file via registry" pattern as the cloud
+// CLIs — coverage just expanded beyond cloud providers.
+
+func TestCloudProbe_GH_HostsYML_GitHubOAuth(t *testing.T) {
+	tmpDir := t.TempDir()
+	path := filepath.Join(tmpDir, "hosts.yml")
+	// Realistic gh hosts.yml shape with a gho_ OAuth token.
+	require.NoError(t, os.WriteFile(path, []byte(`github.com:
+    user: amfortin
+    oauth_token: gho_0123456789abcdefghijABCDEFGHIJ012345
+    git_protocol: https
+`), 0600))
+
+	idx := fileindex.NewFileIndex()
+	idx.Add("gh_hosts", path)
+
+	probe := NewCloudProbe(models.ProbeSettings{Enabled: true}, newD1Registry())
+	probe.SetFileIndex(idx)
+
+	findings, err := probe.Execute(context.Background())
+	require.NoError(t, err)
+
+	hasOAuth := false
+	for _, f := range findings {
+		if f.Metadata["token_type"] == "oauth-token" {
+			hasOAuth = true
+		}
+	}
+	assert.True(t, hasOAuth, "gho_ OAuth token in hosts.yml must surface as oauth-token")
+}
+
+func TestCloudProbe_GlabConfig_GitLabPAT(t *testing.T) {
+	tmpDir := t.TempDir()
+	path := filepath.Join(tmpDir, "config.yml")
+	require.NoError(t, os.WriteFile(path, []byte(`hosts:
+    gitlab.com:
+        token: glpat-AbCdEfGhIjKlMnOpQrSt
+        api_protocol: https
+`), 0600))
+
+	idx := fileindex.NewFileIndex()
+	idx.Add("glab_config", path)
+
+	probe := NewCloudProbe(models.ProbeSettings{Enabled: true}, newD1Registry())
+	probe.SetFileIndex(idx)
+
+	findings, err := probe.Execute(context.Background())
+	require.NoError(t, err)
+	assert.NotEmpty(t, findings, "glab token must be surfaced (via generic-api-key)")
+}
+
+func TestCloudProbe_HubConfig_OAuthToken(t *testing.T) {
+	tmpDir := t.TempDir()
+	path := filepath.Join(tmpDir, "hub")
+	// hub stores a 40-char hex token; older format but still in use.
+	require.NoError(t, os.WriteFile(path, []byte(`github.com:
+- user: amfortin
+  oauth_token: 0123456789abcdef0123456789abcdef01234567
+  protocol: https
+`), 0600))
+
+	idx := fileindex.NewFileIndex()
+	idx.Add("hub_config", path)
+
+	probe := NewCloudProbe(models.ProbeSettings{Enabled: true}, newD1Registry())
+	probe.SetFileIndex(idx)
+
+	findings, err := probe.Execute(context.Background())
+	require.NoError(t, err)
+	assert.NotEmpty(t, findings, "hub oauth_token must be surfaced (via generic-api-key)")
+}
+
+func TestCloudProbe_Netrc_PasswordLine(t *testing.T) {
+	tmpDir := t.TempDir()
+	path := filepath.Join(tmpDir, ".netrc")
+	// machine/login/password is the canonical .netrc shape; the
+	// password is what we care about.
+	require.NoError(t, os.WriteFile(path, []byte(`machine github.com
+  login amfortin
+  password ghp_0123456789abcdefghijABCDEFGHIJ012345
+
+machine api.example.com
+  login deploy-bot
+  password hunter2-supersecret-token-value-123
+`), 0600))
+
+	idx := fileindex.NewFileIndex()
+	idx.Add("netrc_file", path)
+
+	probe := NewCloudProbe(models.ProbeSettings{Enabled: true}, newD1Registry())
+	probe.SetFileIndex(idx)
+
+	findings, err := probe.Execute(context.Background())
+	require.NoError(t, err)
+
+	hasPAT := false
+	for _, f := range findings {
+		if f.Metadata["token_type"] == "classic-pat" {
+			hasPAT = true
+		}
+	}
+	assert.True(t, hasPAT, "ghp_ token stashed as .netrc password must classify as classic-pat")
+}
+
 func TestCloudProbe_DeduplicatesPathsAcrossPatterns(t *testing.T) {
 	tmpDir := t.TempDir()
 	path := filepath.Join(tmpDir, "shared")
