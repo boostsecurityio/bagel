@@ -241,6 +241,26 @@ func setDefaults(v *viper.Viper) {
 		{"name": "hub_config", "patterns": []string{".config/hub"}, "type": "glob"},
 		{"name": "netrc_file", "patterns": []string{".netrc", "_netrc"}, "type": "glob"},
 
+		// Kiro IDE MCP — same shape as Claude Code's mcpServers; suffix
+		// matching catches both user (~/.kiro/) and project (<repo>/.kiro/) forms.
+		{"name": "kiro_mcp", "patterns": []string{".kiro/settings/mcp.json"}, "type": "glob"},
+
+		// Salesforce CLIs. .sf is the newer CLI's auth store;
+		// .sfdx/auth/* is the legacy layout. Both hold OAuth refresh tokens.
+		{"name": "sf_config", "patterns": []string{".sf/*"}, "type": "glob"},
+		{"name": "sfdx_config", "patterns": []string{".sfdx/*", ".sfdx/auth/*"}, "type": "glob"},
+
+		// Ansible — top-level files (galaxy_token, vault_password*).
+		// The cp/ socket dir and tmp/ subdirs aren't credentials and
+		// produce no findings on a registry pass.
+		{"name": "ansible_config", "patterns": []string{".ansible/*"}, "type": "glob"},
+
+		// Rails / WordPress DB config — project-level files holding
+		// cleartext DB passwords. Suffix matching catches them at any
+		// repo depth without anchoring to home root.
+		{"name": "rails_database_yml", "patterns": []string{"config/database.yml"}, "type": "glob"},
+		{"name": "wp_config", "patterns": []string{"wp-config.php"}, "type": "glob"},
+
 		// Docker
 		{"name": "docker_config", "patterns": []string{".docker/config.json"}, "type": "glob"},
 

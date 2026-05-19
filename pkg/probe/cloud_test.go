@@ -673,6 +673,107 @@ machine api.example.com
 	assert.True(t, hasPAT, "ghp_ token stashed as .netrc password must classify as classic-pat")
 }
 
+// Phase D-3: Salesforce + Ansible + Rails/WordPress.
+
+func TestCloudProbe_Salesforce_SF_AuthJSON(t *testing.T) {
+	tmpDir := t.TempDir()
+	// SF CLI stashes one JSON file per org alias; the access/refresh
+	// tokens are top-level string fields.
+	path := filepath.Join(tmpDir, "prod-org.json")
+	require.NoError(t, os.WriteFile(path, []byte(`{
+"orgId":"00D000000000000",
+"username":"admin@example.com",
+"accessToken":"00D000000000000!ARSAQA1234567890ABCDEFGHIJKLMNOPQRSTUVWX",
+"refreshToken":"5Aep861234567890ABCDEFGHIJKLMNOPQRSTUVWX"
+}`), 0600))
+
+	idx := fileindex.NewFileIndex()
+	idx.Add("sf_config", path)
+
+	probe := NewCloudProbe(models.ProbeSettings{Enabled: true}, newD1Registry())
+	probe.SetFileIndex(idx)
+
+	findings, err := probe.Execute(context.Background())
+	require.NoError(t, err)
+	assert.NotEmpty(t, findings, "SF auth JSON must surface its tokens")
+}
+
+func TestCloudProbe_Ansible_GalaxyToken(t *testing.T) {
+	tmpDir := t.TempDir()
+	path := filepath.Join(tmpDir, "galaxy_token")
+	// galaxy_token is a single line: `token: <40+ chars>`. Value must
+	// avoid the generic-api-key detector's "obvious placeholder"
+	// exclusion list (^xxx|yyy|zzz|abc|123) — real Ansible tokens
+	// look like random hex.
+	require.NoError(t, os.WriteFile(path,
+		[]byte("token: e7f9c1d4b3a2e8f6c5d7b9a1e3f5c7d9b1a3e5f7\n"), 0600))
+
+	idx := fileindex.NewFileIndex()
+	idx.Add("ansible_config", path)
+
+	probe := NewCloudProbe(models.ProbeSettings{Enabled: true}, newD1Registry())
+	probe.SetFileIndex(idx)
+
+	findings, err := probe.Execute(context.Background())
+	require.NoError(t, err)
+	assert.NotEmpty(t, findings, "Ansible galaxy_token must surface")
+}
+
+func TestCloudProbe_Rails_DatabaseYML_DBConnectionString(t *testing.T) {
+	tmpDir := t.TempDir()
+	path := filepath.Join(tmpDir, "database.yml")
+	// Real Rails configs commonly carry a `url:` with the full DB
+	// connection string — the DB-conn-string detector classifies it
+	// specifically rather than relying on generic-api-key.
+	require.NoError(t, os.WriteFile(path, []byte(`production:
+  adapter: postgresql
+  url: postgres://app:hunter2-supersecret@db.example.com:5432/myapp
+`), 0600))
+
+	idx := fileindex.NewFileIndex()
+	idx.Add("rails_database_yml", path)
+
+	r := detector.NewRegistry()
+	r.Register(detector.NewDatabaseConnectionDetector())
+	r.Register(detector.NewGenericAPIKeyDetector())
+
+	probe := NewCloudProbe(models.ProbeSettings{Enabled: true}, r)
+	probe.SetFileIndex(idx)
+
+	findings, err := probe.Execute(context.Background())
+	require.NoError(t, err)
+
+	hasDB := false
+	for _, f := range findings {
+		if f.ID == "database-connection-string" {
+			hasDB = true
+			assert.Equal(t, "postgres", f.Metadata["scheme"])
+		}
+	}
+	assert.True(t, hasDB, "Rails database.yml URL must classify as database-connection-string")
+}
+
+func TestCloudProbe_WordPress_WpConfig_DBPassword(t *testing.T) {
+	tmpDir := t.TempDir()
+	path := filepath.Join(tmpDir, "wp-config.php")
+	require.NoError(t, os.WriteFile(path, []byte(`<?php
+define('DB_NAME', 'wordpress');
+define('DB_USER', 'wpuser');
+define('DB_PASSWORD', 'hunter2-supersecret-database-pw');
+define('AUTH_KEY', 'random-string-here-with-enough-entropy-to-trigger-detection');
+`), 0600))
+
+	idx := fileindex.NewFileIndex()
+	idx.Add("wp_config", path)
+
+	probe := NewCloudProbe(models.ProbeSettings{Enabled: true}, newD1Registry())
+	probe.SetFileIndex(idx)
+
+	findings, err := probe.Execute(context.Background())
+	require.NoError(t, err)
+	assert.NotEmpty(t, findings, "wp-config.php DB_PASSWORD must surface via generic-api-key")
+}
+
 func TestCloudProbe_DeduplicatesPathsAcrossPatterns(t *testing.T) {
 	tmpDir := t.TempDir()
 	path := filepath.Join(tmpDir, "shared")

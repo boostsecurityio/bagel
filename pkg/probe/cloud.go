@@ -90,6 +90,13 @@ var cloudCredentialPatterns = []string{
 	"glab_config",
 	"hub_config",
 	"netrc_file",
+
+	// SaaS CRM + automation + DB-app configs (Phase D-3).
+	"sf_config",          // Salesforce SF CLI auth
+	"sfdx_config",        // Salesforce sfdx (legacy) auth
+	"ansible_config",     // ~/.ansible/* — galaxy_token, vault_password*
+	"rails_database_yml", // <repo>/config/database.yml — DB passwords
+	"wp_config",          // <repo>/wp-config.php — WP keys + DB password
 }
 
 // Execute runs the cloud probe
