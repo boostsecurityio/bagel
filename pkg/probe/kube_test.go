@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 
 	"github.com/boostsecurityio/bagel/pkg/detector"
@@ -210,6 +211,12 @@ func TestKubeProbe_NoFileIndexAndNoEnvReturnsNothing(t *testing.T) {
 }
 
 func TestKubeProbe_SystemKubeconfigPathScannedWhenPresent(t *testing.T) {
+	// The probe's system-path loop is Unix-only (k3s + kubeadm don't
+	// ship Windows builds), so this test has no behavior to exercise
+	// on Windows runners.
+	if runtime.GOOS == "windows" {
+		t.Skip("system kubeconfig stat is Unix-only")
+	}
 	// Stand in for /etc/rancher/k3s/k3s.yaml — we redirect the
 	// system-path list at a tmp file we can actually write.
 	tmpDir := t.TempDir()
@@ -241,6 +248,9 @@ func TestKubeProbe_SystemKubeconfigPathScannedWhenPresent(t *testing.T) {
 }
 
 func TestKubeProbe_SystemKubeconfigMissingNoError(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("system kubeconfig stat is Unix-only")
+	}
 	orig := systemKubeconfigPaths
 	t.Cleanup(func() { systemKubeconfigPaths = orig })
 	systemKubeconfigPaths = []string{"/nonexistent/path/should-not-exist.yaml"}
