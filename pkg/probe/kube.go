@@ -7,7 +7,9 @@ import (
 	"bytes"
 	"context"
 	"encoding/base64"
+	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"runtime"
 	"strings"
@@ -131,10 +133,14 @@ func (p *KubeProbe) collectKubeconfigPaths(ctx context.Context) []string {
 	}
 
 	// System kubeconfigs — direct stat. processKubeconfig handles the
-	// non-existent / unreadable cases gracefully.
+	// unreadable cases gracefully (logs + skips), so we only filter
+	// out paths that definitively do not exist. Stat errors other
+	// than ErrNotExist (e.g. EACCES from a hardened parent directory)
+	// still get appended so the read attempt's permission error
+	// reaches the user-visible log.
 	if runtime.GOOS != "windows" {
 		for _, sysPath := range systemKubeconfigPaths {
-			if _, err := os.Stat(sysPath); err == nil {
+			if _, err := os.Stat(sysPath); err == nil || !errors.Is(err, fs.ErrNotExist) {
 				paths = append(paths, sysPath)
 			}
 		}
