@@ -103,6 +103,8 @@ func setDefaults(v *viper.Viper) {
 	v.SetDefault("probes.kube.enabled", true)
 	v.SetDefault("probes.docker.enabled", true)
 	v.SetDefault("probes.iac.enabled", true)
+	v.SetDefault("probes.ai_mcp.enabled", true)
+	v.SetDefault("probes.ai_context.enabled", true)
 	v.SetDefault("output.include_file_hashes", false)
 	v.SetDefault("output.include_file_content", false)
 
@@ -249,6 +251,58 @@ func setDefaults(v *viper.Viper) {
 		{"name": "codex_chats", "patterns": []string{".codex/sessions/*/*/*/rollout-*.jsonl"}, "type": "glob"},
 		{"name": "claude_chats", "patterns": []string{".claude/projects/*/*.jsonl"}, "type": "glob"},
 		{"name": "opencode_chats", "patterns": []string{".local/share/opencode/storage/part/msg_*/prt_*.json"}, "type": "glob"},
+
+		// Additional AI agent history / paste / env surfaces beyond
+		// session rollouts. Users routinely paste tokens into prompts;
+		// the paste-cache is literally a record of those pastes. REPL
+		// history files capture every prompt the user submitted at the
+		// top level (separate from per-session rollouts).
+		{"name": "claude_repl_history", "patterns": []string{".claude/history.jsonl"}, "type": "glob"},
+		{"name": "claude_paste_cache", "patterns": []string{".claude/paste-cache/*"}, "type": "glob"},
+		{"name": "claude_session_env", "patterns": []string{".claude/session-env/*"}, "type": "glob"},
+		{"name": "codex_repl_history", "patterns": []string{".codex/history.jsonl"}, "type": "glob"},
+		{"name": "opencode_session_info", "patterns": []string{".local/share/opencode/storage/session/info/*.json"}, "type": "glob"},
+		{"name": "opencode_session_message", "patterns": []string{".local/share/opencode/storage/session/message/*/*.json"}, "type": "glob"},
+
+		// AI agent MCP server configs. mcpServers blocks carry the env
+		// map that holds API tokens for third-party services (GitHub
+		// PATs, Slack tokens, etc.). claude.json is the application
+		// state file; settings.{,local.}json may carry mcpServers too;
+		// .mcp.json is a project-level MCP-only file.
+		{"name": "claude_app_state", "patterns": []string{".claude/claude.json"}, "type": "glob"},
+		{"name": "claude_settings", "patterns": []string{
+			".claude/settings.json",
+			".claude/settings.local.json",
+		}, "type": "glob"},
+		{"name": "mcp_project_config", "patterns": []string{".mcp.json"}, "type": "glob"},
+
+		// AI agent context/memory files — pasted secrets get baked
+		// into these by users. Basename match: catch them anywhere
+		// under home (per-repo CLAUDE.md, global ~/.claude/CLAUDE.md,
+		// codex/opencode AGENTS.md, etc.).
+		{"name": "ai_memory_md", "patterns": []string{
+			"CLAUDE.md",
+			"AGENTS.md",
+		}, "type": "glob"},
+
+		// Claude Code user-level customization. Commands, agents, and
+		// skills are user-authored Markdown that Claude loads as
+		// context — secrets in the prompt body get sent to the model
+		// on every invocation.
+		{"name": "claude_commands", "patterns": []string{".claude/commands/*.md"}, "type": "glob"},
+		{"name": "claude_agents", "patterns": []string{".claude/agents/*.md"}, "type": "glob"},
+		// Skills usually have SKILL.md at the skill root plus optional
+		// sibling .md docs; the glob catches both shapes.
+		{"name": "claude_skills", "patterns": []string{".claude/skills/*/*.md"}, "type": "glob"},
+		// Cross-agent skill store (a number of plugins symlink into
+		// ~/.agents/skills/). Worth scanning so the underlying files
+		// surface even when symlinks aren't being followed.
+		{"name": "agents_skills", "patterns": []string{".agents/skills/*/*.md"}, "type": "glob"},
+
+		// Codex CLI context/memory.
+		{"name": "codex_instructions", "patterns": []string{".codex/instructions.md"}, "type": "glob"},
+		{"name": "codex_memories", "patterns": []string{".codex/memories/*"}, "type": "glob"},
+		{"name": "codex_skills", "patterns": []string{".codex/skills/*/*.md"}, "type": "glob"},
 
 		// WireGuard (user-level configs; system paths are checked directly by the probe)
 		{"name": "wireguard_config", "patterns": []string{".config/wireguard/*.conf"}, "type": "glob"},

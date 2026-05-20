@@ -354,6 +354,48 @@ func TestPatternMatching_GlobPatterns(t *testing.T) {
 	assert.Len(t, sshKeys, 3) // Should match id_rsa, id_ed25519, id_ecdsa
 }
 
+// TestPatternMatching_WildcardSuffix locks in the behavior that
+// wildcard-plus-slash patterns match anywhere under the base dir, not
+// just at the root. This is what lets a pattern like
+// `.claude/commands/*.md` catch project-level agent files without
+// users having to enumerate every project depth.
+func TestPatternMatching_WildcardSuffix(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	testFiles := []string{
+		// Home-root level — must still match.
+		".claude/commands/deploy.md",
+		// Project level at varying depths — must also match.
+		"projects/repo-a/.claude/commands/build.md",
+		"work/team/projects/repo-b/.claude/commands/lint.md",
+		// Wrong segment count — must NOT match (* doesn't traverse /).
+		".claude/commands/sub/nested.md",
+		// Wrong leaf extension — must NOT match.
+		".claude/commands/notes.txt",
+	}
+
+	for _, file := range testFiles {
+		fullPath := filepath.Join(tmpDir, file)
+		require.NoError(t, os.MkdirAll(filepath.Dir(fullPath), 0755))
+		require.NoError(t, os.WriteFile(fullPath, []byte("x"), 0644))
+	}
+
+	patterns := []Pattern{{
+		Name:     "claude_commands",
+		Patterns: []string{".claude/commands/*.md"},
+		Type:     PatternTypeGlob,
+	}}
+
+	index, err := BuildIndex(context.Background(), BuildIndexInput{
+		BaseDirs: []string{tmpDir},
+		Patterns: patterns,
+	})
+	require.NoError(t, err)
+
+	matches := index.Get("claude_commands")
+	assert.Len(t, matches, 3, "expected the three .md command files at varying depths to match, got: %v", matches)
+}
+
 func TestPatternMatching_ExactMatch(t *testing.T) {
 	tmpDir := t.TempDir()
 

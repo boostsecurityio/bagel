@@ -206,5 +206,16 @@ func initializeProbes(cfg *models.Config) []probe.Probe {
 		probes = append(probes, probe.NewIaCProbe(cfg.Probes.IaC, registry))
 	}
 
+	// AI MCP probe — credentials in MCP server configs (scan-only;
+	// scrub would break agents by replacing real tokens with markers).
+	if cfg.Probes.AIMCP.Enabled {
+		probes = append(probes, probe.NewMCPProbe(cfg.Probes.AIMCP, registry))
+	}
+
+	// AI context/memory probe — CLAUDE.md / AGENTS.md scanning.
+	if cfg.Probes.AIContext.Enabled {
+		probes = append(probes, probe.NewContextProbe(cfg.Probes.AIContext, registry))
+	}
+
 	return probes
 }

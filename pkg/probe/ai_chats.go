@@ -17,13 +17,29 @@ import (
 const defaultAIChatsMaxFileSize = 1 * 1024 * 1024 // 1MB
 
 // aiChatsPatterns lists the FileIndex pattern names whose matches hold AI
-// CLI conversation history. These are append-only logs: scrubbing them is
-// safe because tools don't read them back as state.
+// CLI conversation history, REPL input, paste cache, and per-session env
+// snapshots. All are append-only/replaceable surfaces: scrubbing them is
+// safe because tools don't read them back as authoritative state — at
+// worst a replay surfaces `[REDACTED-X]` instead of the original secret,
+// which is the desired outcome.
 var aiChatsPatterns = []string{
 	"gemini_chats",
 	"codex_chats",
 	"claude_chats",
 	"opencode_chats",
+
+	// REPL input + paste + per-session env (Claude Code).
+	"claude_repl_history",
+	"claude_paste_cache",
+	"claude_session_env",
+
+	// Codex top-level REPL history (distinct from sessions/rollouts).
+	"codex_repl_history",
+
+	// OpenCode session metadata + message storage (siblings to the
+	// existing opencode_chats `part/` files).
+	"opencode_session_info",
+	"opencode_session_message",
 }
 
 // AIChatsProbe scans AI CLI conversation history files (jsonl, chat json).
