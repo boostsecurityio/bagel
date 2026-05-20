@@ -62,7 +62,6 @@ sudo mv bagel /usr/local/bin/
 ```
 **Homebrew:**
 ```bash
-brew tap boostsecurityio/tap
 brew install bagel
 ```
 
