@@ -149,10 +149,11 @@ func (p *DockerProbe) findingFromAuth(
 		return nil
 	}
 
-	// Bracket-and-quote notation so common registry keys
-	// (https://index.docker.io/v1/) — which contain dots, colons, and
-	// slashes — map back to auths[<key>].auth unambiguously.
-	source := fmt.Sprintf("file:%s#auths[%q].auth", path, host)
+	// Bracket-and-quote notation keeps it
+	// unambiguous when the registry host contains dots or slashes
+	// (https://index.docker.io/v1/ being the canonical example).
+	source := "file:" + path
+	location := fmt.Sprintf("auths[%q].auth", host)
 	primary := models.Finding{
 		ID:          "docker-registry-inline-auth",
 		Type:        models.FindingTypeSecret,
@@ -163,7 +164,7 @@ func (p *DockerProbe) findingFromAuth(
 		Description: "An inline base64(user:password) credential is stored in the container config. " +
 			"Configure a credential helper (credsStore / credHelpers) so credentials live in the OS keychain " +
 			"instead of on disk in cleartext.",
-		Message: fmt.Sprintf("Inline registry credential for %s in %s", host, path),
+		Message: fmt.Sprintf("Inline registry credential for %s in file:%s", host, path),
 		Path:    source,
 		Metadata: map[string]interface{}{
 			"runtime":          runtimeName,
@@ -171,6 +172,7 @@ func (p *DockerProbe) findingFromAuth(
 			"username":         username,
 			"has_password":     password != "",
 			"username_present": username != "",
+			"location":         location,
 		},
 	}
 	findings := make([]models.Finding, 0, 4)
@@ -191,6 +193,7 @@ func (p *DockerProbe) findingFromAuth(
 			}
 			f.Metadata["runtime"] = runtimeName
 			f.Metadata["registry_host"] = host
+			f.Metadata["location"] = location
 			findings = append(findings, f)
 		}
 	}
@@ -207,7 +210,8 @@ func (p *DockerProbe) findingFromIdentityToken(
 	host string,
 	token string,
 ) []models.Finding {
-	source := fmt.Sprintf("file:%s#auths[%q].identitytoken", path, host)
+	source := "file:" + path
+	location := fmt.Sprintf("auths[%q].identitytoken", host)
 	primary := models.Finding{
 		ID:          "docker-registry-inline-identity-token",
 		Type:        models.FindingTypeSecret,
@@ -217,11 +221,12 @@ func (p *DockerProbe) findingFromIdentityToken(
 		Title:       "Container Registry Identity Token Stored Inline",
 		Description: "A registry identity token is stored in the container config. Identity tokens are " +
 			"often long-lived OAuth refresh tokens; rotate the token and configure a credential helper.",
-		Message: fmt.Sprintf("Inline registry identity token for %s in %s", host, path),
+		Message: fmt.Sprintf("Inline registry identity token for %s in file:%s", host, path),
 		Path:    source,
 		Metadata: map[string]interface{}{
 			"runtime":       runtimeName,
 			"registry_host": host,
+			"location":      location,
 		},
 	}
 	findings := make([]models.Finding, 0, 4)
@@ -237,6 +242,7 @@ func (p *DockerProbe) findingFromIdentityToken(
 		}
 		f.Metadata["runtime"] = runtimeName
 		f.Metadata["registry_host"] = host
+		f.Metadata["location"] = location
 		findings = append(findings, f)
 	}
 	return findings

@@ -226,7 +226,8 @@ func (p *KubeProbe) scanEncoded(
 		return nil
 	}
 
-	source := fmt.Sprintf("file:%s#users[%d].user.%s", path, userIdx, field)
+	source := "file:" + path
+	location := fmt.Sprintf("users[%d].user.%s", userIdx, field)
 	detCtx := models.NewDetectionContext(models.NewDetectionContextInput{
 		Source:    source,
 		ProbeName: p.Name(),
@@ -242,6 +243,7 @@ func (p *KubeProbe) scanEncoded(
 		found[i].Metadata["kubeconfig_path"] = path
 		found[i].Metadata["kubeconfig_user"] = userName
 		found[i].Metadata["kubeconfig_field"] = field
+		found[i].Metadata["location"] = location
 	}
 	return found
 }

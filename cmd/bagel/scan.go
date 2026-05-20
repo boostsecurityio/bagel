@@ -201,5 +201,10 @@ func initializeProbes(cfg *models.Config) []probe.Probe {
 		probes = append(probes, probe.NewDockerProbe(cfg.Probes.Docker, registry))
 	}
 
+	// Infrastructure-as-Code probe — Terraform + Helm credential discovery
+	if cfg.Probes.IaC.Enabled {
+		probes = append(probes, probe.NewIaCProbe(cfg.Probes.IaC, registry))
+	}
+
 	return probes
 }
