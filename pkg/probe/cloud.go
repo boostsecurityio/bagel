@@ -97,6 +97,11 @@ var cloudCredentialPatterns = []string{
 	"ansible_config",     // ~/.ansible/* — galaxy_token, vault_password*
 	"rails_database_yml", // <repo>/config/database.yml — DB passwords
 	"wp_config",          // <repo>/wp-config.php — WP keys + DB password
+
+	// Docker context TLS keys (Phase D-5). cert.pem / ca.pem are public
+	// (BEGIN CERTIFICATE) and the SSH-private-key detector ignores them;
+	// key.pem (BEGIN PRIVATE KEY) is the real secret and matches.
+	"docker_context_keys",
 }
 
 // Execute runs the cloud probe
@@ -127,6 +132,13 @@ func (p *CloudProbe) Execute(ctx context.Context) ([]models.Finding, error) {
 					Str("file", filePath).
 					Str("pattern", pattern).
 					Msg("Skipping expired AWS credential cache")
+				continue
+			}
+			// PEM private-key files need whole-file scanning — the
+			// SSH-private-key detector matches the BEGIN…END envelope
+			// which line-by-line scanning splits across calls.
+			if isPEMFilePattern(pattern) {
+				findings = append(findings, p.processPEMFile(ctx, filePath)...)
 				continue
 			}
 			findings = append(findings, p.processCloudFile(ctx, filePath)...)
@@ -186,6 +198,29 @@ func (p *CloudProbe) processCloudFile(ctx context.Context, filePath string) []mo
 // whose contents are credential caches with an embedded expiry.
 func isAWSCachePattern(pattern string) bool {
 	return pattern == "aws_sso_cache" || pattern == "aws_cli_cache"
+}
+
+// isPEMFilePattern returns true for patterns whose matches hold PEM
+// blocks (BEGIN…END) that the detector needs to see in one piece.
+// Per-line scanning would split the envelope across calls and the
+// SSH-private-key detector would never fire.
+func isPEMFilePattern(pattern string) bool {
+	return pattern == "docker_context_keys"
+}
+
+// processPEMFile reads a file whole and runs the registry against the
+// full content. Used for patterns flagged by isPEMFilePattern.
+func (p *CloudProbe) processPEMFile(ctx context.Context, filePath string) []models.Finding {
+	content, err := os.ReadFile(filePath)
+	if err != nil {
+		log.Ctx(ctx).Debug().Err(err).Str("file", filePath).Msg("Cannot read PEM file")
+		return nil
+	}
+	detCtx := models.NewDetectionContext(models.NewDetectionContextInput{
+		Source:    "file:" + filePath,
+		ProbeName: p.Name(),
+	})
+	return p.detectorRegistry.DetectAll(string(content), detCtx)
 }
 
 // awsCacheExpiryGrace covers clock skew between the local machine and

@@ -173,3 +173,33 @@ func TestDockerProbe_DisabledByConfig(t *testing.T) {
 	probe := NewDockerProbe(models.ProbeSettings{Enabled: false}, newDockerRegistry())
 	assert.False(t, probe.IsEnabled())
 }
+
+func TestDockerProbe_HelmOCIRegistry_InlineAuth(t *testing.T) {
+	// Helm's OCI registry config uses the same JSON shape as Docker's
+	// config.json — the existing auths parser handles it; this test
+	// confirms the helm_oci_registry pattern is wired into the probe's
+	// source list and that the runtime metadata is `helm`.
+	tmpDir := t.TempDir()
+	encoded := base64.StdEncoding.EncodeToString([]byte("helmbot:hunter2"))
+	path := writeDockerConfig(t, tmpDir, `{
+  "auths": {
+    "registry.example.com": {"auth": "`+encoded+`"}
+  }
+}`)
+
+	idx := fileindex.NewFileIndex()
+	idx.Add("helm_oci_registry", path)
+
+	probe := NewDockerProbe(models.ProbeSettings{Enabled: true}, newDockerRegistry())
+	probe.SetFileIndex(idx)
+
+	findings, err := probe.Execute(context.Background())
+	require.NoError(t, err)
+	require.Len(t, findings, 1)
+
+	f := findings[0]
+	assert.Equal(t, "docker-registry-inline-auth", f.ID)
+	assert.Equal(t, "helm", f.Metadata["runtime"])
+	assert.Equal(t, "registry.example.com", f.Metadata["registry_host"])
+	assert.Equal(t, "helmbot", f.Metadata["username"])
+}

@@ -267,6 +267,17 @@ func setDefaults(v *viper.Viper) {
 		// Podman / containers — same schema as docker config.json, different path.
 		{"name": "podman_config", "patterns": []string{".config/containers/auth.json"}, "type": "glob"},
 
+		// Helm OCI registry auth — `helm registry login` writes a
+		// docker-config-shaped JSON here. Same `auths{<host>.auth}`
+		// blob with base64(user:password) that DockerProbe already knows how to parse.
+		{"name": "helm_oci_registry", "patterns": []string{".config/helm/registry/config.json"}, "type": "glob"},
+
+		// Docker context TLS material — client cert + key + CA for
+		// connecting to a remote Docker daemon. Only the key.pem is a
+		// secret; cert.pem and ca.pem start with `BEGIN CERTIFICATE`
+		// which the SSH-private-key detector ignores by design.
+		{"name": "docker_context_keys", "patterns": []string{".docker/contexts/tls/*/*/*.pem"}, "type": "glob"},
+
 		// Kubernetes
 		{"name": "kubeconfig", "patterns": []string{".kube/config"}, "type": "glob"},
 
@@ -274,7 +285,8 @@ func setDefaults(v *viper.Viper) {
 		{"name": "bashrc", "patterns": []string{".bashrc", ".bash_profile", ".profile"}, "type": "glob"},
 		{"name": "zshrc", "patterns": []string{".zshrc", ".zprofile"}, "type": "glob"},
 
-		// Shell history files - Unix shells and PowerShell (Windows)
+		// Shell history files - Unix shells and PowerShell (Windows).
+		// Also covers DB and language-REPL input history.
 		{"name": "shell_history", "patterns": []string{
 			".bash_history",
 			".zsh_history",
@@ -283,6 +295,13 @@ func setDefaults(v *viper.Viper) {
 			".local/share/fish/fish_history",
 			// PowerShell history (Windows)
 			"AppData/Roaming/Microsoft/Windows/PowerShell/PSReadLine/ConsoleHost_history.txt",
+			// DB / language REPL histories
+			".psql_history",
+			".mysql_history",
+			".sqlite_history",
+			".python_history",
+			".node_repl_history",
+			".irb_history",
 		}, "type": "glob"},
 
 		// Environment files

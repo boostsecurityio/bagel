@@ -774,6 +774,62 @@ define('AUTH_KEY', 'random-string-here-with-enough-entropy-to-trigger-detection'
 	assert.NotEmpty(t, findings, "wp-config.php DB_PASSWORD must surface via generic-api-key")
 }
 
+// Phase D-5: Docker contexts ship TLS material for remote daemons —
+// the key.pem is a real client certificate's private key. cert.pem and
+// ca.pem are public certificates and produce no findings, as expected.
+
+func TestCloudProbe_DockerContext_PrivateKeyDetected(t *testing.T) {
+	tmpDir := t.TempDir()
+	path := filepath.Join(tmpDir, "key.pem")
+	// Realistic-looking unencrypted PKCS8 private key block — the
+	// SSH-private-key detector's regex matches any
+	// `-----BEGIN ... PRIVATE KEY-----` envelope, including non-SSH ones.
+	pem := "-----BEGIN PRIVATE KEY-----\n" +
+		"MIIEvQIBADANBgkqhkiG9w0BAQEFAASCBKcwggSjAgEAAoIBAQ" +
+		"DemoFakeKeyMaterialForTestUseOnlyAbsolutelyNotARealKey" +
+		"\n-----END PRIVATE KEY-----\n"
+	require.NoError(t, os.WriteFile(path, []byte(pem), 0600))
+
+	idx := fileindex.NewFileIndex()
+	idx.Add("docker_context_keys", path)
+
+	r := detector.NewRegistry()
+	r.Register(detector.NewSSHPrivateKeyDetector())
+
+	probe := NewCloudProbe(models.ProbeSettings{Enabled: true}, r)
+	probe.SetFileIndex(idx)
+
+	findings, err := probe.Execute(context.Background())
+	require.NoError(t, err)
+	require.NotEmpty(t, findings, "Docker context key.pem must surface as a PEM private key")
+	assert.Equal(t, "ssh-private-key-pkcs8", findings[0].ID)
+}
+
+func TestCloudProbe_DockerContext_PublicCertSilent(t *testing.T) {
+	tmpDir := t.TempDir()
+	path := filepath.Join(tmpDir, "cert.pem")
+	// Public certificate — BEGIN CERTIFICATE, not BEGIN PRIVATE KEY.
+	// The SSH-private-key detector deliberately ignores this so we
+	// don't spam findings for every public cert on disk.
+	pem := "-----BEGIN CERTIFICATE-----\n" +
+		"MIIDazCCAlOgAwIBAgIUExampleCertificateBodyNotARealCertificateContent" +
+		"\n-----END CERTIFICATE-----\n"
+	require.NoError(t, os.WriteFile(path, []byte(pem), 0600))
+
+	idx := fileindex.NewFileIndex()
+	idx.Add("docker_context_keys", path)
+
+	r := detector.NewRegistry()
+	r.Register(detector.NewSSHPrivateKeyDetector())
+
+	probe := NewCloudProbe(models.ProbeSettings{Enabled: true}, r)
+	probe.SetFileIndex(idx)
+
+	findings, err := probe.Execute(context.Background())
+	require.NoError(t, err)
+	assert.Empty(t, findings, "public cert.pem must not produce findings")
+}
+
 func TestCloudProbe_DeduplicatesPathsAcrossPatterns(t *testing.T) {
 	tmpDir := t.TempDir()
 	path := filepath.Join(tmpDir, "shared")
