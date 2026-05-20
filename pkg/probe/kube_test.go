@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 
 	"github.com/boostsecurityio/bagel/pkg/detector"
@@ -197,7 +198,67 @@ func TestKubeProbe_SkipsOversizedKubeconfig(t *testing.T) {
 
 func TestKubeProbe_NoFileIndexAndNoEnvReturnsNothing(t *testing.T) {
 	t.Setenv("KUBECONFIG", "")
+	// Zero out system paths for the duration so the test passes on
+	// machines that have /etc/rancher/k3s/k3s.yaml present.
+	orig := systemKubeconfigPaths
+	t.Cleanup(func() { systemKubeconfigPaths = orig })
+	systemKubeconfigPaths = nil
+
 	probe := NewKubeProbe(models.ProbeSettings{Enabled: true}, newKubeRegistry())
+	findings, err := probe.Execute(context.Background())
+	require.NoError(t, err)
+	assert.Empty(t, findings)
+}
+
+func TestKubeProbe_SystemKubeconfigPathScannedWhenPresent(t *testing.T) {
+	// The probe's system-path loop is Unix-only (k3s + kubeadm don't
+	// ship Windows builds), so this test has no behavior to exercise
+	// on Windows runners.
+	if runtime.GOOS == "windows" {
+		t.Skip("system kubeconfig stat is Unix-only")
+	}
+	// Stand in for /etc/rancher/k3s/k3s.yaml — we redirect the
+	// system-path list at a tmp file we can actually write.
+	tmpDir := t.TempDir()
+	sysPath := filepath.Join(tmpDir, "k3s.yaml")
+	token := makeK8sSAToken(t)
+	require.NoError(t, os.WriteFile(sysPath, []byte(
+		"users:\n- name: admin\n  user:\n    token: "+token+"\n",
+	), 0600))
+
+	orig := systemKubeconfigPaths
+	t.Cleanup(func() { systemKubeconfigPaths = orig })
+	systemKubeconfigPaths = []string{sysPath}
+
+	t.Setenv("KUBECONFIG", "")
+	probe := NewKubeProbe(models.ProbeSettings{Enabled: true}, newKubeRegistry())
+	probe.SetFileIndex(fileindex.NewFileIndex()) // no kubeconfig pattern entries
+
+	findings, err := probe.Execute(context.Background())
+	require.NoError(t, err)
+
+	var jwt *models.Finding
+	for i := range findings {
+		if findings[i].ID == "jwt-jwt-token" {
+			jwt = &findings[i]
+		}
+	}
+	require.NotNil(t, jwt, "system kubeconfig must be stat'd + scanned without a file-index hit")
+	assert.Equal(t, "jwt-kubernetes-service-account", jwt.Metadata["token_subtype"])
+}
+
+func TestKubeProbe_SystemKubeconfigMissingNoError(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("system kubeconfig stat is Unix-only")
+	}
+	orig := systemKubeconfigPaths
+	t.Cleanup(func() { systemKubeconfigPaths = orig })
+	systemKubeconfigPaths = []string{"/nonexistent/path/should-not-exist.yaml"}
+
+	t.Setenv("KUBECONFIG", "")
+	probe := NewKubeProbe(models.ProbeSettings{Enabled: true}, newKubeRegistry())
+	probe.SetFileIndex(fileindex.NewFileIndex())
+
 	findings, err := probe.Execute(context.Background())
 	require.NoError(t, err)
 	assert.Empty(t, findings)

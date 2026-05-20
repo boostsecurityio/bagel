@@ -315,3 +315,40 @@ func TestMCPProbe_NoFileIndexReturnsNothing(t *testing.T) {
 	require.NoError(t, err)
 	assert.Empty(t, findings)
 }
+
+func TestMCPProbe_KiroIDE_ExtractsGitHubPATFromEnv(t *testing.T) {
+	tmpDir := t.TempDir()
+	pat := "ghp_" + "0123456789abcdefghijABCDEFGHIJ012345"
+	path := writeMCPConfig(t, tmpDir, "mcp.json", `{
+  "mcpServers": {
+    "github": {
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-github"],
+      "env": {"GITHUB_PERSONAL_ACCESS_TOKEN": "`+pat+`"}
+    }
+  }
+}`)
+
+	// Kiro's pattern key is distinct from Claude's; the test confirms
+	// the ai_mcp probe routes Kiro files through the same parser.
+	idx := fileindex.NewFileIndex()
+	idx.Add("kiro_mcp", path)
+
+	probe := NewMCPProbe(models.ProbeSettings{Enabled: true}, newMCPRegistry())
+	probe.SetFileIndex(idx)
+
+	findings, err := probe.Execute(context.Background())
+	require.NoError(t, err)
+	require.NotEmpty(t, findings)
+
+	var pat_finding *models.Finding
+	for i := range findings {
+		if findings[i].Metadata["token_type"] == "classic-pat" {
+			pat_finding = &findings[i]
+			break
+		}
+	}
+	require.NotNil(t, pat_finding, "Kiro MCP must reuse the Claude MCP parser")
+	assert.Equal(t, "github", pat_finding.Metadata["mcp_server_name"])
+	assert.Equal(t, "GITHUB_PERSONAL_ACCESS_TOKEN", pat_finding.Metadata["env_var"])
+}

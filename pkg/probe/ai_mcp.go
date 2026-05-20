@@ -68,13 +68,15 @@ func (p *MCPProbe) SetFileIndex(index *fileindex.FileIndex) {
 }
 
 // mcpConfigPatterns lists the file-index pattern names whose matches
-// contain Claude Code MCP server config. .mcp.json is Claude's
-// project-level MCP file; settings.{,local.}json and claude.json all
-// support the mcpServers key.
+// contain MCP server config. Claude Code splits configs across
+// claude.json, settings.{,local.}json, and .mcp.json; Kiro IDE uses
+// its own .kiro/settings/mcp.json. All share the same `mcpServers`
+// JSON schema, so the same parser handles every entry.
 var mcpConfigPatterns = []string{
 	"claude_app_state",   // ~/.claude/claude.json
 	"claude_settings",    // ~/.claude/settings{,.local}.json + project .claude/settings.local.json
 	"mcp_project_config", // project .mcp.json
+	"kiro_mcp",           // ~/.kiro/settings/mcp.json + project .kiro/settings/mcp.json
 }
 
 // Execute walks every indexed MCP config file and emits findings for

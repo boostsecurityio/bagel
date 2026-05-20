@@ -178,6 +178,8 @@ func setDefaults(v *viper.Viper) {
 		// AWS
 		{"name": "aws_config", "patterns": []string{".aws/config"}, "type": "glob"},
 		{"name": "aws_credentials", "patterns": []string{".aws/credentials"}, "type": "glob"},
+		{"name": "aws_sso_cache", "patterns": []string{".aws/sso/cache/*.json"}, "type": "glob"},
+		{"name": "aws_cli_cache", "patterns": []string{".aws/cli/cache/*.json"}, "type": "glob"},
 
 		// Google Cloud (GCP) - Unix: ~/.config/gcloud, Windows: %APPDATA%\gcloud
 		{"name": "gcp_config", "patterns": []string{
@@ -211,12 +213,70 @@ func setDefaults(v *viper.Viper) {
 			"AppData/Roaming/.azure/clouds.config",
 			"AppData/Roaming/.azure/azureProfile.json",
 		}, "type": "glob"},
+		{"name": "azure_tokens", "patterns": []string{
+			".azure/accessTokens.json",
+			".azure/msal_token_cache.*",
+			".azure/msazure.login/*",
+			".azure/azd/*",
+			"AppData/Roaming/.azure/accessTokens.json",
+			"AppData/Roaming/.azure/msal_token_cache.*",
+		}, "type": "glob"},
+		{"name": "oci_config", "patterns": []string{
+			".oci/config",
+			".oci/sessions/*",
+		}, "type": "glob"},
+		{"name": "aliyun_config", "patterns": []string{".aliyun/config.json"}, "type": "glob"},
+		{"name": "bluemix_config", "patterns": []string{".bluemix/config.json"}, "type": "glob"},
+		{"name": "doctl_config", "patterns": []string{".config/doctl/config.yaml"}, "type": "glob"},
+		{"name": "hcloud_config", "patterns": []string{".config/hcloud/cli.toml"}, "type": "glob"},
+		{"name": "scw_config", "patterns": []string{".config/scw/config.yaml"}, "type": "glob"},
+		{"name": "linode_config", "patterns": []string{".config/linode-cli/*"}, "type": "glob"},
+		{"name": "fly_config", "patterns": []string{".fly/config.yml"}, "type": "glob"},
+		{"name": "vercel_config", "patterns": []string{".vercel/auth.json"}, "type": "glob"},
+		{"name": "railway_config", "patterns": []string{".railway/config.json"}, "type": "glob"},
+		{"name": "snowflake_config", "patterns": []string{".snowflake/connections.toml"}, "type": "glob"},
+		{"name": "doppler_config", "patterns": []string{".doppler.yaml"}, "type": "glob"},
+		{"name": "gh_hosts", "patterns": []string{".config/gh/hosts.yml"}, "type": "glob"},
+		{"name": "glab_config", "patterns": []string{".config/glab-cli/config.yml"}, "type": "glob"},
+		{"name": "hub_config", "patterns": []string{".config/hub"}, "type": "glob"},
+		{"name": "netrc_file", "patterns": []string{".netrc", "_netrc"}, "type": "glob"},
+
+		// Kiro IDE MCP — same shape as Claude Code's mcpServers; suffix
+		// matching catches both user (~/.kiro/) and project (<repo>/.kiro/) forms.
+		{"name": "kiro_mcp", "patterns": []string{".kiro/settings/mcp.json"}, "type": "glob"},
+
+		// Salesforce CLIs. .sf is the newer CLI's auth store;
+		// .sfdx/auth/* is the legacy layout. Both hold OAuth refresh tokens.
+		{"name": "sf_config", "patterns": []string{".sf/*"}, "type": "glob"},
+		{"name": "sfdx_config", "patterns": []string{".sfdx/*", ".sfdx/auth/*"}, "type": "glob"},
+
+		// Ansible — top-level files (galaxy_token, vault_password*).
+		// The cp/ socket dir and tmp/ subdirs aren't credentials and
+		// produce no findings on a registry pass.
+		{"name": "ansible_config", "patterns": []string{".ansible/*"}, "type": "glob"},
+
+		// Rails / WordPress DB config — project-level files holding
+		// cleartext DB passwords. Suffix matching catches them at any
+		// repo depth without anchoring to home root.
+		{"name": "rails_database_yml", "patterns": []string{"config/database.yml"}, "type": "glob"},
+		{"name": "wp_config", "patterns": []string{"wp-config.php"}, "type": "glob"},
 
 		// Docker
 		{"name": "docker_config", "patterns": []string{".docker/config.json"}, "type": "glob"},
 
 		// Podman / containers — same schema as docker config.json, different path.
 		{"name": "podman_config", "patterns": []string{".config/containers/auth.json"}, "type": "glob"},
+
+		// Helm OCI registry auth — `helm registry login` writes a
+		// docker-config-shaped JSON here. Same `auths{<host>.auth}`
+		// blob with base64(user:password) that DockerProbe already knows how to parse.
+		{"name": "helm_oci_registry", "patterns": []string{".config/helm/registry/config.json"}, "type": "glob"},
+
+		// Docker context TLS material — client cert + key + CA for
+		// connecting to a remote Docker daemon. Only the key.pem is a
+		// secret; cert.pem and ca.pem start with `BEGIN CERTIFICATE`
+		// which the SSH-private-key detector ignores by design.
+		{"name": "docker_context_keys", "patterns": []string{".docker/contexts/tls/*/*/*.pem"}, "type": "glob"},
 
 		// Kubernetes
 		{"name": "kubeconfig", "patterns": []string{".kube/config"}, "type": "glob"},
@@ -225,7 +285,8 @@ func setDefaults(v *viper.Viper) {
 		{"name": "bashrc", "patterns": []string{".bashrc", ".bash_profile", ".profile"}, "type": "glob"},
 		{"name": "zshrc", "patterns": []string{".zshrc", ".zprofile"}, "type": "glob"},
 
-		// Shell history files - Unix shells and PowerShell (Windows)
+		// Shell history files - Unix shells and PowerShell (Windows).
+		// Also covers DB and language-REPL input history.
 		{"name": "shell_history", "patterns": []string{
 			".bash_history",
 			".zsh_history",
@@ -234,6 +295,13 @@ func setDefaults(v *viper.Viper) {
 			".local/share/fish/fish_history",
 			// PowerShell history (Windows)
 			"AppData/Roaming/Microsoft/Windows/PowerShell/PSReadLine/ConsoleHost_history.txt",
+			// DB / language REPL histories
+			".psql_history",
+			".mysql_history",
+			".sqlite_history",
+			".python_history",
+			".node_repl_history",
+			".irb_history",
 		}, "type": "glob"},
 
 		// Environment files

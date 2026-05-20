@@ -555,3 +555,78 @@ func TestShellHistoryProbe_ZshHistoryParsing(t *testing.T) {
 	assert.True(t, findingIDs["github-token-classic-pat"], "Should detect GitHub PAT tokens")
 	assert.True(t, findingIDs["npm-token-npm-auth-token"], "Should detect NPM token")
 }
+
+// D-4: DB REPL + language REPL history files all route through the
+// shell_history pattern and the existing probe. The probe code didn't
+// change — these tests lock in that the new pattern entries surface
+// pasted credentials.
+
+func TestShellHistoryProbe_DetectsSecretsInPsqlHistory(t *testing.T) {
+	tmpDir := t.TempDir()
+	ctx := context.Background()
+
+	// .psql_history typical content: SQL typed at the psql prompt.
+	// `\c <conn-string>` and ALTER USER … PASSWORD are the classic
+	// ways credentials end up in this file.
+	path := filepath.Join(tmpDir, ".psql_history")
+	body := `SELECT * FROM users;
+\c postgres://app:hunter2-supersecret@db.example.com:5432/myapp
+ALTER USER app WITH PASSWORD 'PgPr0dQuiteLongPassWord';
+`
+	require.NoError(t, os.WriteFile(path, []byte(body), 0600))
+
+	idx := fileindex.NewFileIndex()
+	idx.Add("shell_history", path)
+
+	r := detector.NewRegistry()
+	r.Register(detector.NewDatabaseConnectionDetector())
+	r.Register(detector.NewGenericAPIKeyDetector())
+
+	probe := NewShellHistoryProbe(models.ProbeSettings{Enabled: true}, r)
+	probe.SetFileIndex(idx)
+
+	findings, err := probe.Execute(ctx)
+	require.NoError(t, err)
+
+	hasDBConn := false
+	for _, f := range findings {
+		if f.ID == "database-connection-string" {
+			hasDBConn = true
+			assert.Equal(t, "postgres", f.Metadata["scheme"])
+		}
+	}
+	assert.True(t, hasDBConn, `psql \c with embedded password must classify as database-connection-string`)
+}
+
+func TestShellHistoryProbe_DetectsSecretsInPythonHistory(t *testing.T) {
+	tmpDir := t.TempDir()
+	ctx := context.Background()
+
+	pat := "ghp_" + "0123456789abcdefghijABCDEFGHIJ012345"
+	path := filepath.Join(tmpDir, ".python_history")
+	body := `import os
+os.environ["GITHUB_TOKEN"] = "` + pat + `"
+print("hi")
+`
+	require.NoError(t, os.WriteFile(path, []byte(body), 0600))
+
+	idx := fileindex.NewFileIndex()
+	idx.Add("shell_history", path)
+
+	r := detector.NewRegistry()
+	r.Register(detector.NewGitHubPATDetector())
+
+	probe := NewShellHistoryProbe(models.ProbeSettings{Enabled: true}, r)
+	probe.SetFileIndex(idx)
+
+	findings, err := probe.Execute(ctx)
+	require.NoError(t, err)
+
+	hasPAT := false
+	for _, f := range findings {
+		if f.Metadata["token_type"] == "classic-pat" {
+			hasPAT = true
+		}
+	}
+	assert.True(t, hasPAT, "GitHub PAT pasted into Python REPL must surface as classic-pat")
+}

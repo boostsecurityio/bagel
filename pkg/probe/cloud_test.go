@@ -7,7 +7,9 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"strconv"
 	"testing"
+	"time"
 
 	"github.com/boostsecurityio/bagel/pkg/detector"
 	"github.com/boostsecurityio/bagel/pkg/fileindex"
@@ -343,4 +345,511 @@ func TestCloudProbe_UnreadableFile(t *testing.T) {
 	require.NoError(t, err)
 	// Note: depending on permissions, we might get findings or not
 	// The key is that it doesn't crash
+}
+
+// Phase D-1: cloud / SaaS CLI round-up. The probe consumes a single
+// shared pattern slice (cloudCredentialPatterns); these tests lock
+// in the slice membership by inserting one credential-bearing file
+// per vendor pattern and asserting the registry picks it up.
+
+func newD1Registry() *detector.Registry {
+	r := detector.NewRegistry()
+	r.Register(detector.NewCloudCredentialsDetector())
+	r.Register(detector.NewJWTDetector())
+	r.Register(detector.NewGitHubPATDetector())
+	r.Register(detector.NewGenericAPIKeyDetector())
+	return r
+}
+
+func TestCloudProbe_AWS_SSO_Cache(t *testing.T) {
+	tmpDir := t.TempDir()
+	path := filepath.Join(tmpDir, "11aabbccdd.json")
+	// Realistic SSO cache shape: accessToken is the secret, the rest is metadata.
+	require.NoError(t, os.WriteFile(path, []byte(`{
+"startUrl":"https://example.awsapps.com/start",
+"accessToken":"aoatJ.veryLongSSOAccessTokenWithEnoughCharsToHitGenericKeyDetector",
+"expiresAt":"2099-01-01T00:00:00Z"
+}`), 0600))
+
+	idx := fileindex.NewFileIndex()
+	idx.Add("aws_sso_cache", path)
+
+	probe := NewCloudProbe(models.ProbeSettings{Enabled: true}, newD1Registry())
+	probe.SetFileIndex(idx)
+
+	findings, err := probe.Execute(context.Background())
+	require.NoError(t, err)
+	require.NotEmpty(t, findings, "SSO cache accessToken must be picked up by the registry")
+}
+
+func TestCloudProbe_Azure_Tokens(t *testing.T) {
+	tmpDir := t.TempDir()
+	path := filepath.Join(tmpDir, "accessTokens.json")
+	// Single-line JWT in a JSON value — JWT detector must fire.
+	pat := "eyJhbGciOiJSUzI1NiJ9.eyJpc3MiOiJodHRwczovL3N0cy53aW5kb3dzLm5ldC9hYWFhYWFhYS1hYWFhLWFhYWEtYWFhYS1hYWFhYWFhYWFhYWEvIn0.signaturepartlongenoughtomatch"
+	require.NoError(t, os.WriteFile(path, []byte(`[{"accessToken":"`+pat+`"}]`), 0600))
+
+	idx := fileindex.NewFileIndex()
+	idx.Add("azure_tokens", path)
+
+	probe := NewCloudProbe(models.ProbeSettings{Enabled: true}, newD1Registry())
+	probe.SetFileIndex(idx)
+
+	findings, err := probe.Execute(context.Background())
+	require.NoError(t, err)
+	require.NotEmpty(t, findings)
+	// JWT subtype enrichment should classify it as Azure AD.
+	hasAzure := false
+	for _, f := range findings {
+		if f.Metadata["token_subtype"] == "jwt-azure-ad" {
+			hasAzure = true
+		}
+	}
+	assert.True(t, hasAzure, "Azure AD JWT subtype must be set on the finding")
+}
+
+func TestCloudProbe_VendorCLIs_AllPatternsHit(t *testing.T) {
+	tmpDir := t.TempDir()
+	// One credential-bearing file per single-vendor pattern. Body uses
+	// an AWS-shaped access key — the most universally-recognized secret
+	// shape — so we don't depend on per-vendor detectors that don't
+	// exist yet. The point is that the file is reached and scanned.
+	akia := "AKIAIOSFODNN7EXAMPLE"
+	cases := []struct {
+		pattern string
+		body    string
+	}{
+		{"oci_config", "[DEFAULT]\nkey=" + akia + "\n"},
+		{"aliyun_config", `{"profiles":[{"access_key_id":"` + akia + `"}]}`},
+		{"bluemix_config", `{"IAMToken":"` + akia + `"}`},
+		{"doctl_config", "access-token: " + akia + "\n"},
+		{"hcloud_config", "token = \"" + akia + "\"\n"},
+		{"scw_config", "secret_key: " + akia + "\n"},
+		{"linode_config", "token=" + akia + "\n"},
+		{"fly_config", "access_token: " + akia + "\n"},
+		{"vercel_config", `{"token":"` + akia + `"}`},
+		{"railway_config", `{"token":"` + akia + `"}`},
+		{"snowflake_config", "password = \"" + akia + "\"\n"},
+		{"doppler_config", "token: " + akia + "\n"},
+	}
+
+	idx := fileindex.NewFileIndex()
+	for i, c := range cases {
+		path := filepath.Join(tmpDir, c.pattern+strconv.Itoa(i))
+		require.NoError(t, os.WriteFile(path, []byte(c.body), 0600))
+		idx.Add(c.pattern, path)
+	}
+
+	probe := NewCloudProbe(models.ProbeSettings{Enabled: true}, newD1Registry())
+	probe.SetFileIndex(idx)
+
+	findings, err := probe.Execute(context.Background())
+	require.NoError(t, err)
+
+	hit := 0
+	for _, f := range findings {
+		if f.ID == "cloud-credential-aws-access-key-id" {
+			hit++
+		}
+	}
+	assert.Equal(t, len(cases), hit,
+		"each vendor pattern must produce at least one cloud-credential finding (got %d of %d)",
+		hit, len(cases))
+}
+
+// Expired AWS SSO / CLI cache files are the dominant source of false
+// positives for those two patterns — the files sit on disk long after
+// the embedded credential is dead. The probe pre-checks expiry and
+// skips dead files entirely; these tests lock that behavior in.
+
+func TestCloudProbe_AWS_CLI_Cache_Expired_Skipped(t *testing.T) {
+	tmpDir := t.TempDir()
+	path := filepath.Join(tmpDir, "expired.json")
+	// 16 months ago — well past any reasonable session lifetime.
+	require.NoError(t, os.WriteFile(path, []byte(`{
+"Credentials": {
+  "AccessKeyId": "ASIAIOSFODNN7EXAMPLE",
+  "SecretAccessKey": "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY",
+  "SessionToken": "IQoJb3JpZ2luX2VjStillExampleNoLongerValid",
+  "Expiration": "2025-01-21T09:42:24Z"
+}}`), 0600))
+
+	idx := fileindex.NewFileIndex()
+	idx.Add("aws_cli_cache", path)
+
+	probe := NewCloudProbe(models.ProbeSettings{Enabled: true}, newD1Registry())
+	probe.SetFileIndex(idx)
+
+	findings, err := probe.Execute(context.Background())
+	require.NoError(t, err)
+	assert.Empty(t, findings, "expired CLI cache must not produce findings")
+}
+
+func TestCloudProbe_AWS_CLI_Cache_Fresh_Reported(t *testing.T) {
+	tmpDir := t.TempDir()
+	path := filepath.Join(tmpDir, "fresh.json")
+	future := time.Now().UTC().Add(time.Hour).Format(time.RFC3339)
+	require.NoError(t, os.WriteFile(path, []byte(`{
+"Credentials": {
+  "AccessKeyId": "ASIAIOSFODNN7EXAMPLE",
+  "SecretAccessKey": "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY",
+  "Expiration": "`+future+`"
+}}`), 0600))
+
+	idx := fileindex.NewFileIndex()
+	idx.Add("aws_cli_cache", path)
+
+	probe := NewCloudProbe(models.ProbeSettings{Enabled: true}, newD1Registry())
+	probe.SetFileIndex(idx)
+
+	findings, err := probe.Execute(context.Background())
+	require.NoError(t, err)
+	assert.NotEmpty(t, findings, "live CLI cache must be reported")
+}
+
+func TestCloudProbe_AWS_SSO_Cache_Expired_Skipped(t *testing.T) {
+	tmpDir := t.TempDir()
+	path := filepath.Join(tmpDir, "sso-expired.json")
+	require.NoError(t, os.WriteFile(path, []byte(`{
+"startUrl":"https://example.awsapps.com/start",
+"accessToken":"aoatJ.veryLongSSOAccessTokenWithEnoughCharsToHitGenericKeyDetector",
+"expiresAt":"2025-01-01T00:00:00Z"
+}`), 0600))
+
+	idx := fileindex.NewFileIndex()
+	idx.Add("aws_sso_cache", path)
+
+	probe := NewCloudProbe(models.ProbeSettings{Enabled: true}, newD1Registry())
+	probe.SetFileIndex(idx)
+
+	findings, err := probe.Execute(context.Background())
+	require.NoError(t, err)
+	assert.Empty(t, findings, "expired SSO cache must not produce findings")
+}
+
+func TestCloudProbe_AWS_SSO_Cache_Fresh_Reported(t *testing.T) {
+	tmpDir := t.TempDir()
+	path := filepath.Join(tmpDir, "sso-fresh.json")
+	future := time.Now().UTC().Add(time.Hour).Format(time.RFC3339)
+	require.NoError(t, os.WriteFile(path, []byte(`{
+"startUrl":"https://example.awsapps.com/start",
+"accessToken":"aoatJ.veryLongSSOAccessTokenWithEnoughCharsToHitGenericKeyDetector",
+"expiresAt":"`+future+`"
+}`), 0600))
+
+	idx := fileindex.NewFileIndex()
+	idx.Add("aws_sso_cache", path)
+
+	probe := NewCloudProbe(models.ProbeSettings{Enabled: true}, newD1Registry())
+	probe.SetFileIndex(idx)
+
+	findings, err := probe.Execute(context.Background())
+	require.NoError(t, err)
+	assert.NotEmpty(t, findings, "live SSO cache must be reported")
+}
+
+func TestCloudProbe_AWS_Cache_MalformedFile_StillScanned(t *testing.T) {
+	// When we can't tell whether the cache is expired (bad JSON, missing
+	// expiry field, etc.) we err toward reporting — better a noisy
+	// finding the user can dismiss than silently dropping a live token.
+	tmpDir := t.TempDir()
+	path := filepath.Join(tmpDir, "malformed.json")
+	require.NoError(t, os.WriteFile(path,
+		[]byte(`AccessKeyId=AKIAIOSFODNN7EXAMPLE`), 0600))
+
+	idx := fileindex.NewFileIndex()
+	idx.Add("aws_cli_cache", path)
+
+	probe := NewCloudProbe(models.ProbeSettings{Enabled: true}, newD1Registry())
+	probe.SetFileIndex(idx)
+
+	findings, err := probe.Execute(context.Background())
+	require.NoError(t, err)
+	assert.NotEmpty(t, findings, "malformed cache file must still be scanned")
+}
+
+// Phase D-2: code-forge CLI auth files + .netrc. These follow the same
+// "scan home-dir credential file via registry" pattern as the cloud
+// CLIs — coverage just expanded beyond cloud providers.
+
+func TestCloudProbe_GH_HostsYML_GitHubOAuth(t *testing.T) {
+	tmpDir := t.TempDir()
+	path := filepath.Join(tmpDir, "hosts.yml")
+	// Realistic gh hosts.yml shape with a gho_ OAuth token.
+	require.NoError(t, os.WriteFile(path, []byte(`github.com:
+    user: amfortin
+    oauth_token: gho_0123456789abcdefghijABCDEFGHIJ012345
+    git_protocol: https
+`), 0600))
+
+	idx := fileindex.NewFileIndex()
+	idx.Add("gh_hosts", path)
+
+	probe := NewCloudProbe(models.ProbeSettings{Enabled: true}, newD1Registry())
+	probe.SetFileIndex(idx)
+
+	findings, err := probe.Execute(context.Background())
+	require.NoError(t, err)
+
+	hasOAuth := false
+	for _, f := range findings {
+		if f.Metadata["token_type"] == "oauth-token" {
+			hasOAuth = true
+		}
+	}
+	assert.True(t, hasOAuth, "gho_ OAuth token in hosts.yml must surface as oauth-token")
+}
+
+func TestCloudProbe_GlabConfig_GitLabPAT(t *testing.T) {
+	tmpDir := t.TempDir()
+	path := filepath.Join(tmpDir, "config.yml")
+	require.NoError(t, os.WriteFile(path, []byte(`hosts:
+    gitlab.com:
+        token: glpat-AbCdEfGhIjKlMnOpQrSt
+        api_protocol: https
+`), 0600))
+
+	idx := fileindex.NewFileIndex()
+	idx.Add("glab_config", path)
+
+	probe := NewCloudProbe(models.ProbeSettings{Enabled: true}, newD1Registry())
+	probe.SetFileIndex(idx)
+
+	findings, err := probe.Execute(context.Background())
+	require.NoError(t, err)
+	assert.NotEmpty(t, findings, "glab token must be surfaced (via generic-api-key)")
+}
+
+func TestCloudProbe_HubConfig_OAuthToken(t *testing.T) {
+	tmpDir := t.TempDir()
+	path := filepath.Join(tmpDir, "hub")
+	// hub stores a 40-char hex token; older format but still in use.
+	require.NoError(t, os.WriteFile(path, []byte(`github.com:
+- user: amfortin
+  oauth_token: 0123456789abcdef0123456789abcdef01234567
+  protocol: https
+`), 0600))
+
+	idx := fileindex.NewFileIndex()
+	idx.Add("hub_config", path)
+
+	probe := NewCloudProbe(models.ProbeSettings{Enabled: true}, newD1Registry())
+	probe.SetFileIndex(idx)
+
+	findings, err := probe.Execute(context.Background())
+	require.NoError(t, err)
+	assert.NotEmpty(t, findings, "hub oauth_token must be surfaced (via generic-api-key)")
+}
+
+func TestCloudProbe_Netrc_PasswordLine(t *testing.T) {
+	tmpDir := t.TempDir()
+	path := filepath.Join(tmpDir, ".netrc")
+	// machine/login/password is the canonical .netrc shape; the
+	// password is what we care about.
+	require.NoError(t, os.WriteFile(path, []byte(`machine github.com
+  login amfortin
+  password ghp_0123456789abcdefghijABCDEFGHIJ012345
+
+machine api.example.com
+  login deploy-bot
+  password hunter2-supersecret-token-value-123
+`), 0600))
+
+	idx := fileindex.NewFileIndex()
+	idx.Add("netrc_file", path)
+
+	probe := NewCloudProbe(models.ProbeSettings{Enabled: true}, newD1Registry())
+	probe.SetFileIndex(idx)
+
+	findings, err := probe.Execute(context.Background())
+	require.NoError(t, err)
+
+	hasPAT := false
+	for _, f := range findings {
+		if f.Metadata["token_type"] == "classic-pat" {
+			hasPAT = true
+		}
+	}
+	assert.True(t, hasPAT, "ghp_ token stashed as .netrc password must classify as classic-pat")
+}
+
+// Phase D-3: Salesforce + Ansible + Rails/WordPress.
+
+func TestCloudProbe_Salesforce_SF_AuthJSON(t *testing.T) {
+	tmpDir := t.TempDir()
+	// SF CLI stashes one JSON file per org alias; the access/refresh
+	// tokens are top-level string fields.
+	path := filepath.Join(tmpDir, "prod-org.json")
+	require.NoError(t, os.WriteFile(path, []byte(`{
+"orgId":"00D000000000000",
+"username":"admin@example.com",
+"accessToken":"00D000000000000!ARSAQA1234567890ABCDEFGHIJKLMNOPQRSTUVWX",
+"refreshToken":"5Aep861234567890ABCDEFGHIJKLMNOPQRSTUVWX"
+}`), 0600))
+
+	idx := fileindex.NewFileIndex()
+	idx.Add("sf_config", path)
+
+	probe := NewCloudProbe(models.ProbeSettings{Enabled: true}, newD1Registry())
+	probe.SetFileIndex(idx)
+
+	findings, err := probe.Execute(context.Background())
+	require.NoError(t, err)
+	assert.NotEmpty(t, findings, "SF auth JSON must surface its tokens")
+}
+
+func TestCloudProbe_Ansible_GalaxyToken(t *testing.T) {
+	tmpDir := t.TempDir()
+	path := filepath.Join(tmpDir, "galaxy_token")
+	// galaxy_token is a single line: `token: <40+ chars>`. Value must
+	// avoid the generic-api-key detector's "obvious placeholder"
+	// exclusion list (^xxx|yyy|zzz|abc|123) — real Ansible tokens
+	// look like random hex.
+	require.NoError(t, os.WriteFile(path,
+		[]byte("token: e7f9c1d4b3a2e8f6c5d7b9a1e3f5c7d9b1a3e5f7\n"), 0600))
+
+	idx := fileindex.NewFileIndex()
+	idx.Add("ansible_config", path)
+
+	probe := NewCloudProbe(models.ProbeSettings{Enabled: true}, newD1Registry())
+	probe.SetFileIndex(idx)
+
+	findings, err := probe.Execute(context.Background())
+	require.NoError(t, err)
+	assert.NotEmpty(t, findings, "Ansible galaxy_token must surface")
+}
+
+func TestCloudProbe_Rails_DatabaseYML_DBConnectionString(t *testing.T) {
+	tmpDir := t.TempDir()
+	path := filepath.Join(tmpDir, "database.yml")
+	// Real Rails configs commonly carry a `url:` with the full DB
+	// connection string — the DB-conn-string detector classifies it
+	// specifically rather than relying on generic-api-key.
+	require.NoError(t, os.WriteFile(path, []byte(`production:
+  adapter: postgresql
+  url: postgres://app:hunter2-supersecret@db.example.com:5432/myapp
+`), 0600))
+
+	idx := fileindex.NewFileIndex()
+	idx.Add("rails_database_yml", path)
+
+	r := detector.NewRegistry()
+	r.Register(detector.NewDatabaseConnectionDetector())
+	r.Register(detector.NewGenericAPIKeyDetector())
+
+	probe := NewCloudProbe(models.ProbeSettings{Enabled: true}, r)
+	probe.SetFileIndex(idx)
+
+	findings, err := probe.Execute(context.Background())
+	require.NoError(t, err)
+
+	hasDB := false
+	for _, f := range findings {
+		if f.ID == "database-connection-string" {
+			hasDB = true
+			assert.Equal(t, "postgres", f.Metadata["scheme"])
+		}
+	}
+	assert.True(t, hasDB, "Rails database.yml URL must classify as database-connection-string")
+}
+
+func TestCloudProbe_WordPress_WpConfig_DBPassword(t *testing.T) {
+	tmpDir := t.TempDir()
+	path := filepath.Join(tmpDir, "wp-config.php")
+	require.NoError(t, os.WriteFile(path, []byte(`<?php
+define('DB_NAME', 'wordpress');
+define('DB_USER', 'wpuser');
+define('DB_PASSWORD', 'hunter2-supersecret-database-pw');
+define('AUTH_KEY', 'random-string-here-with-enough-entropy-to-trigger-detection');
+`), 0600))
+
+	idx := fileindex.NewFileIndex()
+	idx.Add("wp_config", path)
+
+	probe := NewCloudProbe(models.ProbeSettings{Enabled: true}, newD1Registry())
+	probe.SetFileIndex(idx)
+
+	findings, err := probe.Execute(context.Background())
+	require.NoError(t, err)
+	assert.NotEmpty(t, findings, "wp-config.php DB_PASSWORD must surface via generic-api-key")
+}
+
+// Phase D-5: Docker contexts ship TLS material for remote daemons —
+// the key.pem is a real client certificate's private key. cert.pem and
+// ca.pem are public certificates and produce no findings, as expected.
+
+func TestCloudProbe_DockerContext_PrivateKeyDetected(t *testing.T) {
+	tmpDir := t.TempDir()
+	path := filepath.Join(tmpDir, "key.pem")
+	// Realistic-looking unencrypted PKCS8 private key block — the
+	// SSH-private-key detector's regex matches any
+	// `-----BEGIN ... PRIVATE KEY-----` envelope, including non-SSH ones.
+	pem := "-----BEGIN PRIVATE KEY-----\n" +
+		"MIIEvQIBADANBgkqhkiG9w0BAQEFAASCBKcwggSjAgEAAoIBAQ" +
+		"DemoFakeKeyMaterialForTestUseOnlyAbsolutelyNotARealKey" +
+		"\n-----END PRIVATE KEY-----\n"
+	require.NoError(t, os.WriteFile(path, []byte(pem), 0600))
+
+	idx := fileindex.NewFileIndex()
+	idx.Add("docker_context_keys", path)
+
+	r := detector.NewRegistry()
+	r.Register(detector.NewSSHPrivateKeyDetector())
+
+	probe := NewCloudProbe(models.ProbeSettings{Enabled: true}, r)
+	probe.SetFileIndex(idx)
+
+	findings, err := probe.Execute(context.Background())
+	require.NoError(t, err)
+	require.NotEmpty(t, findings, "Docker context key.pem must surface as a PEM private key")
+	assert.Equal(t, "ssh-private-key-pkcs8", findings[0].ID)
+}
+
+func TestCloudProbe_DockerContext_PublicCertSilent(t *testing.T) {
+	tmpDir := t.TempDir()
+	path := filepath.Join(tmpDir, "cert.pem")
+	// Public certificate — BEGIN CERTIFICATE, not BEGIN PRIVATE KEY.
+	// The SSH-private-key detector deliberately ignores this so we
+	// don't spam findings for every public cert on disk.
+	pem := "-----BEGIN CERTIFICATE-----\n" +
+		"MIIDazCCAlOgAwIBAgIUExampleCertificateBodyNotARealCertificateContent" +
+		"\n-----END CERTIFICATE-----\n"
+	require.NoError(t, os.WriteFile(path, []byte(pem), 0600))
+
+	idx := fileindex.NewFileIndex()
+	idx.Add("docker_context_keys", path)
+
+	r := detector.NewRegistry()
+	r.Register(detector.NewSSHPrivateKeyDetector())
+
+	probe := NewCloudProbe(models.ProbeSettings{Enabled: true}, r)
+	probe.SetFileIndex(idx)
+
+	findings, err := probe.Execute(context.Background())
+	require.NoError(t, err)
+	assert.Empty(t, findings, "public cert.pem must not produce findings")
+}
+
+func TestCloudProbe_DeduplicatesPathsAcrossPatterns(t *testing.T) {
+	tmpDir := t.TempDir()
+	path := filepath.Join(tmpDir, "shared")
+	require.NoError(t, os.WriteFile(path, []byte("key=AKIAIOSFODNN7EXAMPLE\n"), 0600))
+
+	idx := fileindex.NewFileIndex()
+	idx.Add("aws_credentials", path)
+	idx.Add("oci_config", path) // same path under two patterns
+
+	probe := NewCloudProbe(models.ProbeSettings{Enabled: true}, newD1Registry())
+	probe.SetFileIndex(idx)
+
+	findings, err := probe.Execute(context.Background())
+	require.NoError(t, err)
+
+	hit := 0
+	for _, f := range findings {
+		if f.ID == "cloud-credential-aws-access-key-id" {
+			hit++
+		}
+	}
+	assert.Equal(t, 1, hit, "same path indexed under multiple patterns must be scanned once")
 }

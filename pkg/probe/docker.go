@@ -73,6 +73,7 @@ func (p *DockerProbe) Execute(ctx context.Context) ([]models.Finding, error) {
 	}{
 		{"docker_config", "docker"},
 		{"podman_config", "podman"},
+		{"helm_oci_registry", "helm"},
 	} {
 		for _, path := range p.fileIndex.Get(src.patternName) {
 			findings = append(findings, p.processConfig(ctx, path, src.runtime)...)

@@ -7,7 +7,9 @@ import (
 	"bytes"
 	"context"
 	"encoding/base64"
+	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"runtime"
 	"strings"
@@ -89,9 +91,22 @@ func (p *KubeProbe) Execute(ctx context.Context) ([]models.Finding, error) {
 	return findings, nil
 }
 
+// systemKubeconfigPaths are admin/system kubeconfig files outside
+// $HOME that the file index won't reach. We stat each on every probe
+// run and feed any that exist through the same kubeconfig path. These
+// are typically root-owned (k3s, kubeadm); a non-root scan will get a
+// permission error on read and log+skip, which is the correct outcome.
+//
+// Declared as a var so tests can override.
+var systemKubeconfigPaths = []string{
+	"/etc/rancher/k3s/k3s.yaml",  // k3s admin kubeconfig
+	"/etc/kubernetes/admin.conf", // kubeadm cluster-admin kubeconfig
+}
+
 // collectKubeconfigPaths gathers candidate kubeconfig file paths from
-// both the file index (~/.kube/config matches) and the KUBECONFIG env
-// var, which often points at non-home paths (e.g. /etc/rancher/k3s/k3s.yaml).
+// the file index (~/.kube/config matches), the KUBECONFIG env var
+// (which often points at non-home paths), and a small set of well-known
+// system kubeconfig paths outside home that the file index can't reach.
 func (p *KubeProbe) collectKubeconfigPaths(ctx context.Context) []string {
 	var paths []string
 
@@ -116,6 +131,21 @@ func (p *KubeProbe) collectKubeconfigPaths(ctx context.Context) []string {
 			paths = append(paths, p)
 		}
 	}
+
+	// System kubeconfigs — direct stat. processKubeconfig handles the
+	// unreadable cases gracefully (logs + skips), so we only filter
+	// out paths that definitively do not exist. Stat errors other
+	// than ErrNotExist (e.g. EACCES from a hardened parent directory)
+	// still get appended so the read attempt's permission error
+	// reaches the user-visible log.
+	if runtime.GOOS != "windows" {
+		for _, sysPath := range systemKubeconfigPaths {
+			if _, err := os.Stat(sysPath); err == nil || !errors.Is(err, fs.ErrNotExist) {
+				paths = append(paths, sysPath)
+			}
+		}
+	}
+
 	return paths
 }
 
