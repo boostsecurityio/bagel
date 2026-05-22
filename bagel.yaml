@@ -24,6 +24,32 @@ probes:
       # max_file_size: maximum bytes to read from a chat file before skipping it.
       # Prevents scan hangs on large conversation histories. Default: 1048576 (1 MB).
       # max_file_size: 1048576
+  mise:
+    # Scans mise (https://mise.jdx.dev) configuration files for plaintext
+    # secrets in [env] tables AND in inline [tasks.*] env/run blocks.
+    # Covers global config plus the mise.toml family (mise.toml, .mise.toml,
+    # mise.local.toml, env-specific variants like mise.production.toml, idiomatic
+    # dir forms, and legacy .rtx.toml). The `redact = true` table form is reported
+    # as a finding (only suppresses output; the secret is still plaintext on disk).
+    enabled: true
+    flags:
+      # max_file_size: maximum bytes to read from a mise config before
+      # skipping it. Mise configs are typically <100KB. Default: 4194304 (4 MB).
+      # max_file_size: 4194304
+  mise_tasks:
+    # Scans mise file-task scripts under mise-tasks/, .mise-tasks/,
+    # mise/tasks/, .mise/tasks/, and .config/mise/tasks/ (at up to 3
+    # levels of sub-directory depth). Each script is line-scanned for
+    # plaintext secrets and its `#MISE env={...}` (or `# [MISE] env=`,
+    # `//MISE env=`) header directives are decoded as inline TOML and
+    # scanned the same way the config probe handles [env] tables.
+    # Findings are tagged `mise_task_file: true` and carry the derived
+    # task name (e.g. `test:units` for `mise-tasks/test/units`).
+    enabled: true
+    flags:
+      # max_file_size: maximum bytes to read from a mise file-task
+      # script before skipping it. Default: 4194304 (4 MB).
+      # max_file_size: 4194304
 privacy:
   redact_paths: []
   exclude_env_prefixes: []

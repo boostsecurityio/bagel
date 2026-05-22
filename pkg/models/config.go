@@ -49,6 +49,8 @@ type ProbeConfig struct {
 	IaC           ProbeSettings `yaml:"iac" mapstructure:"iac"`
 	AIMCP         ProbeSettings `yaml:"ai_mcp" mapstructure:"ai_mcp"`
 	AIContext     ProbeSettings `yaml:"ai_context" mapstructure:"ai_context"`
+	Mise          ProbeSettings `yaml:"mise" mapstructure:"mise"`
+	MiseTasks     ProbeSettings `yaml:"mise_tasks" mapstructure:"mise_tasks"`
 }
 
 // ProbeSettings contains settings for a specific probe

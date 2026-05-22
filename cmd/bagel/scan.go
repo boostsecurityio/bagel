@@ -217,5 +217,18 @@ func initializeProbes(cfg *models.Config) []probe.Probe {
 		probes = append(probes, probe.NewContextProbe(cfg.Probes.AIContext, registry))
 	}
 
+	// mise probe - plaintext secrets in mise.toml [env] tables and
+	// inline [tasks.*] blocks.
+	if cfg.Probes.Mise.Enabled {
+		probes = append(probes, probe.NewMiseProbe(cfg.Probes.Mise, registry))
+	}
+
+	// mise_tasks probe - plaintext secrets in file-task scripts
+	// under mise-tasks/, .mise-tasks/, mise/tasks/, .mise/tasks/,
+	// and .config/mise/tasks/.
+	if cfg.Probes.MiseTasks.Enabled {
+		probes = append(probes, probe.NewMiseTasksProbe(cfg.Probes.MiseTasks, registry))
+	}
+
 	return probes
 }

@@ -262,6 +262,8 @@ Each probe declares its scope (user/system), paths touched, env vars read, and r
 | `jetbrains` | JetBrains IDE configuration | JetBrains IDE workspace files and configuration for embedded secrets |
 | `gh` | GitHub CLI | GitHub CLI authentication tokens and configuration |
 | `ai_cli` | AI CLI tools | Credential files and chat logs for Gemini, Codex, Claude, and OpenCode |
+| `mise` | [`mise`](https://mise.jdx.dev) configuration files | Plaintext secrets in `[env]` tables, `[[env]]` array-of-tables, and `[tasks.*]` env/run blocks |
+| `mise_tasks` | `mise` file-task scripts | Plaintext secrets in script bodies and in `#MISE env={...}` / `# [MISE] env=` / `//MISE env=` header directives |
 
 ### Current Detectors
 
