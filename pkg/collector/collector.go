@@ -15,6 +15,7 @@ import (
 	"github.com/boostsecurityio/bagel/pkg/models"
 	"github.com/boostsecurityio/bagel/pkg/probe"
 	"github.com/boostsecurityio/bagel/pkg/sysinfo"
+	"github.com/boostsecurityio/bagel/pkg/wsl"
 	"github.com/mattn/go-isatty"
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
@@ -132,6 +133,14 @@ func (c *Collector) buildFileIndex(ctx context.Context) (*fileindex.FileIndex, e
 	}
 
 	baseDirs := c.config.FileIndex.BaseDirs
+
+	// On Windows, append the home dirs of installed WSL distros so Linux
+	// secrets behind WSL aren't a blindspot. No-op on other platforms.
+	if c.config.FileIndex.ScanWSL {
+		if wslDirs := wsl.Homes(ctx); len(wslDirs) > 0 {
+			baseDirs = append(append([]string{}, baseDirs...), wslDirs...)
+		}
+	}
 
 	// Try loading from cache (unless disabled)
 	if !c.noCache {
