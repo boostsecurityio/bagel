@@ -23,6 +23,7 @@ var (
 	strict       bool
 	noCache      bool
 	noProgress   bool
+	baseDirs     []string
 )
 
 // scanCmd represents the scan command
@@ -42,6 +43,9 @@ func init() {
 	scanCmd.Flags().BoolVar(&strict, "strict", false, "exit with code 2 if any findings are detected")
 	scanCmd.Flags().BoolVar(&noCache, "no-cache", false, "bypass file index cache and force rebuild")
 	scanCmd.Flags().BoolVar(&noProgress, "no-progress", false, "disable progress bars")
+	scanCmd.Flags().StringSliceVar(&baseDirs, "base-dirs", nil,
+		"comma-separated directories to scan; overrides file_index.base_dirs. "+
+			"e.g. --base-dirs /home,/Users,/root")
 }
 
 func runScan(cmd *cobra.Command, args []string) error {
@@ -53,6 +57,12 @@ func runScan(cmd *cobra.Command, args []string) error {
 	cfg, err := config.Load(cfgFile)
 	if err != nil {
 		return fmt.Errorf("failed to load config: %w", err)
+	}
+
+	// --base-dir takes precedence over config/defaults
+	if len(baseDirs) > 0 {
+		cfg.FileIndex.BaseDirs = baseDirs
+		log.Debug().Strs("base_dirs", baseDirs).Msg("Overriding base dirs from --base-dirs")
 	}
 
 	log.Debug().Msg("Starting scan")
