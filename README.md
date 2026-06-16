@@ -13,6 +13,8 @@ Bagel is a cross‑platform CLI that inspects developer workstations (macOS, Lin
 
 For detailed documentation on each probe and detector, see the [Bagel docs site](https://boostsecurityio.github.io/bagel/).
 
+> **Looking for more?** If you want a more powerful, enterprise-grade version with the ability to deploy at scale and collect posture information across your entire developer laptop fleet, have a look at the [BoostSecurity Developer Endpoint Protection (DEP) product](https://boostsecurity.io/solution/developer-endpoint).
+
 ---
 
 ## Privacy & Safety by Design
@@ -342,6 +344,7 @@ bagel scrub --yes --file ~/.claude/projects/foo/abc123.jsonl
 ## Integrations
 
 * **CI**: run `bagel scan --strict` in your pipeline to fail builds when findings are detected.
+* **Fleet-wide deployment**: for enterprise-grade deployment at scale with centralized posture reporting across your developer laptop fleet, see [BoostSecurity DEP](https://boostsecurity.io/solution/developer-endpoint).
 
 ---
 

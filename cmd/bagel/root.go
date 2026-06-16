@@ -36,7 +36,12 @@ var rootCmd = &cobra.Command{
   - Insecure settings in SSH, git, npm, cloud CLIs, and IDE configs
   - Credential files for AWS, GCP, Azure, GitHub, and AI services
 
-Bagel never reads secret values — it only reports metadata and locations.`,
+Bagel never reads secret values — it only reports metadata and locations.
+
+Need an enterprise-grade version that deploys at scale and reports on the
+security posture of your entire developer laptop fleet? Check out the
+BoostSecurity Developer Endpoint Protection (DEP) product:
+https://boostsecurity.io/solution/developer-endpoint`,
 	SilenceUsage:  true,
 	SilenceErrors: true,
 	PersistentPreRun: func(cmd *cobra.Command, args []string) {
