@@ -37,13 +37,19 @@ func Load(configPath string) (*models.Config, error) {
 	v.SetEnvPrefix("BAGEL")
 	v.AutomaticEnv()
 
-	// Read config file if it exists
+	// Read config file if it exists.
+	// A missing or unreadable config must never block a scan
 	if err := v.ReadInConfig(); err != nil {
 		var configFileNotFoundError viper.ConfigFileNotFoundError
-		if !errors.As(err, &configFileNotFoundError) {
-			return nil, fmt.Errorf("failed to read config file: %w", err)
+		switch {
+		case errors.As(err, &configFileNotFoundError):
+			log.Debug().Msg("config: no config file found; using built-in defaults")
+		case configPath != "":
+			return nil, fmt.Errorf("failed to read config file %q: %w", configPath, err)
+		default:
+			log.Warn().Err(err).Msg(
+				"config: could not read a discovered config file; using built-in defaults")
 		}
-		// Config file not found is OK, we'll use defaults
 	}
 
 	// Unmarshal config
