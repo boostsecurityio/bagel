@@ -217,7 +217,12 @@ func parseMiseTaskHeaderEnv(ctx context.Context, content []byte, path string) ma
 		doc := append([]byte("env = "), m[1]...)
 		var parsed map[string]any
 		if err := toml.Unmarshal(doc, &parsed); err != nil {
-			log.Ctx(ctx).Debug().Err(err).Str("file", path).Bytes("header_value", m[1]).
+			// Log neither the header value nor the parse error: the
+			// value can hold a plaintext secret, and go-toml error
+			// messages interpolate the offending input byte (%c/%#U)
+			// at the failure offset. bagel never logs secret material,
+			// so we record only the file path and the value length.
+			log.Ctx(ctx).Debug().Str("file", path).Int("header_bytes", len(m[1])).
 				Msg("Cannot parse #MISE env header value as TOML")
 			continue
 		}
