@@ -125,6 +125,9 @@ func setDefaults(v *viper.Viper) {
 		homeDir = "." // Fallback to current directory
 	}
 	v.SetDefault("file_index.base_dirs", []string{homeDir})
+	// On Windows, also scan the home dirs of any installed WSL distro so Linux
+	// secrets aren't a blindspot. No-op on other platforms.
+	v.SetDefault("file_index.scan_wsl", true)
 
 	// Default exclude paths — directories we don't expect to find user config
 	// or secrets in but that typically contain millions of files. Entries with
