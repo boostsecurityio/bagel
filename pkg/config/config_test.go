@@ -4,10 +4,13 @@
 package config
 
 import (
+	"bytes"
 	"os"
 	"path/filepath"
 	"testing"
 
+	"github.com/rs/zerolog"
+	"github.com/rs/zerolog/log"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -107,4 +110,47 @@ func TestLoad_ExplicitConfigFailsLoudly(t *testing.T) {
 	missing := filepath.Join(t.TempDir(), "does-not-exist.yaml")
 	_, err := Load(missing)
 	require.Error(t, err)
+}
+
+// TestLoad_ExtensionlessBinaryNotMatched guards the regression where running
+// `./bagel scan` from the binary's own directory crashed with
+// "yaml: control characters are not allowed": with a config type set, viper
+// matches the extensionless `bagel` binary as a config file and tries to parse
+// it. Load must not even attempt to parse it.
+//
+// This asserts on the log output, not just the absence of an error: the
+// resilience switch in Load would swallow the parse failure and let the test
+// pass regardless. The only thing that proves the binary was never parsed is
+// that no "parsing config" failure was logged — which fails if SetConfigType
+// is restored.
+func TestLoad_ExtensionlessBinaryNotMatched(t *testing.T) {
+	logs := captureGlobalLog(t)
+
+	t.Setenv("HOME", t.TempDir())
+	dir := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "bagel"),
+		[]byte("\x7fELF\x02\x01\x01\x00\x00\x00"), 0o755)) // binary with control chars
+	t.Chdir(dir)
+
+	cfg, err := Load("")
+	require.NoError(t, err)
+	require.NotNil(t, cfg)
+	assert.True(t, cfg.Probes.Git.Enabled)
+	assert.NotEmpty(t, cfg.FileIndex.Patterns)
+
+	// The binary must never be fed to the YAML parser.
+	assert.NotContains(t, logs.String(), "parsing config",
+		"the bagel binary was matched and parsed as a config file; "+
+			"is SetConfigType set during auto-discovery?")
+}
+
+// captureGlobalLog redirects the package-global zerolog logger into a buffer
+// for the duration of the test and restores it afterward.
+func captureGlobalLog(t *testing.T) *bytes.Buffer {
+	t.Helper()
+	buf := &bytes.Buffer{}
+	prev := log.Logger
+	log.Logger = zerolog.New(buf)
+	t.Cleanup(func() { log.Logger = prev })
+	return buf
 }

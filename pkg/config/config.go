@@ -26,9 +26,13 @@ func Load(configPath string) (*models.Config, error) {
 	if configPath != "" {
 		v.SetConfigFile(configPath)
 	} else {
-		// Look for config in standard locations
+		// Look for config in standard locations. We deliberately do NOT call
+		// SetConfigType: with a type set, viper also matches an extensionless
+		// file named "bagel" in the search path — so running `./bagel scan`
+		// from the binary's own directory makes viper try to parse the bagel
+		// binary as YAML ("control characters are not allowed"). Without a
+		// type, viper only matches bagel.<ext>.
 		v.SetConfigName("bagel")
-		v.SetConfigType("yaml")
 		v.AddConfigPath(GetConfigDir())
 		v.AddConfigPath(".")
 	}

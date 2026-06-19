@@ -128,7 +128,8 @@ func initConfig() {
 		viper.AddConfigPath(config.GetConfigDir())
 		viper.AddConfigPath(".")
 		viper.SetConfigName("bagel")
-		viper.SetConfigType("yaml")
+		// No SetConfigType: it would make viper match the extensionless "bagel"
+		// binary as a config file (see pkg/config.Load for the full rationale).
 	}
 
 	viper.SetEnvPrefix("BAGEL")
