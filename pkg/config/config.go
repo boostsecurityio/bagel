@@ -115,6 +115,8 @@ func setDefaults(v *viper.Viper) {
 	v.SetDefault("probes.iac.enabled", true)
 	v.SetDefault("probes.ai_mcp.enabled", true)
 	v.SetDefault("probes.ai_context.enabled", true)
+	v.SetDefault("probes.mise.enabled", true)
+	v.SetDefault("probes.mise_tasks.enabled", true)
 	v.SetDefault("output.include_file_hashes", false)
 	v.SetDefault("output.include_file_content", false)
 
@@ -426,6 +428,79 @@ func setDefaults(v *viper.Viper) {
 			".config/helm/repositories.yaml",
 			// macOS
 			"Library/Preferences/helm/repositories.yaml",
+		}, "type": "glob"},
+
+		// mise (https://mise.jdx.dev) - polyglot tool / version /
+		// env manager. The [env] table sets shell env vars and is a
+		// common landing site for plaintext tokens.
+		//
+		// Pattern set tracks `LOCAL_CONFIG_FILENAMES` in mise's
+		// src/config/mod.rs plus the env-specific variants enumerated
+		// in `DEFAULT_CONFIG_FILENAMES`. The probe classifies each
+		// matched file at runtime (global vs project, local-override,
+		// env-specific) based on its path and basename.
+		//
+		// `.rtx.*` are mise's legacy (pre-rename) names; mise still
+		// reads them, so we include them here.
+		{"name": "mise_config", "patterns": []string{
+			// Project-level basenames (match at any depth)
+			"mise.toml",
+			".mise.toml",
+			"mise.*.toml",  // mise.local.toml, mise.production.toml, mise.production.local.toml
+			".mise.*.toml", // .mise.local.toml, .mise.production.toml, etc.
+			".rtx.toml",
+			".rtx.*.toml",
+			// Idiomatic-dir forms (Unix + project-nested copies)
+			"mise/config.toml",
+			"mise/config.*.toml",
+			".mise/config.toml",
+			".mise/config.*.toml",
+			".config/mise.toml",
+			".config/mise.*.toml",
+			".config/mise/config.toml",
+			".config/mise/config.*.toml",
+			".config/mise/mise.toml",
+			".config/mise/mise.*.toml",
+			".config/mise/conf.d/*.toml",
+			// Windows: %APPDATA%\mise\...
+			"AppData/Roaming/mise/config.toml",
+			"AppData/Roaming/mise/config.*.toml",
+			"AppData/Roaming/mise/conf.d/*.toml",
+		}, "type": "glob"},
+
+		// mise file-task scripts. Each entry is a directory whose
+		// files are the task scripts (shell, python, node, deno, ...).
+		// Sub-directories are valid — mise composes the task name
+		// from the path. We enumerate 1-3 levels deep, which covers
+		// the typical `mise-tasks/<category>/<subcategory>/<task>`
+		// shape; deeper nesting is unusual.
+		//
+		// Windows: the docs don't mention Windows-specific paths
+		// for file tasks. Since these are user-authored scripts
+		// kept inside repos, the Unix paths apply via WSL or as
+		// repo-relative paths on plain Windows too.
+		{"name": "mise_task_file", "patterns": []string{
+			// mise-tasks/
+			"mise-tasks/*",
+			"mise-tasks/*/*",
+			"mise-tasks/*/*/*",
+			// .mise-tasks/
+			".mise-tasks/*",
+			".mise-tasks/*/*",
+			".mise-tasks/*/*/*",
+			// mise/tasks/
+			"mise/tasks/*",
+			"mise/tasks/*/*",
+			"mise/tasks/*/*/*",
+			// .mise/tasks/
+			".mise/tasks/*",
+			".mise/tasks/*/*",
+			".mise/tasks/*/*/*",
+			// .config/mise/tasks/ (covers ~/.config/mise/tasks/ when
+			// the home dir is walked + project-nested copies)
+			".config/mise/tasks/*",
+			".config/mise/tasks/*/*",
+			".config/mise/tasks/*/*/*",
 		}, "type": "glob"},
 	})
 }
