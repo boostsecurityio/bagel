@@ -207,3 +207,66 @@ func (f Finding) MarshalJSON() ([]byte, error) {
 	}
 	return data, nil
 }
+
+// DeduplicateFindings groups findings by fingerprint and consolidates duplicate
+// occurrences onto the first finding for that fingerprint, accumulating each
+// location ("path:line") in Locations. Findings without a fingerprint can't be
+// deduplicated and are kept as-is. The input is not mutated; a new ScanResult
+// is returned. This is the canonical finding-identity semantics shared by every
+// consumer (the reporter, and library consumers via this function).
+func DeduplicateFindings(result *ScanResult) *ScanResult {
+	if result == nil || len(result.Findings) == 0 {
+		return result
+	}
+
+	seen := make(map[string]int) // fingerprint -> index in dedupedFindings
+	var dedupedFindings []Finding
+
+	for _, finding := range result.Findings {
+		fingerprint := finding.Fingerprint
+
+		// If no fingerprint, keep the finding as-is (no dedup possible).
+		if fingerprint == "" {
+			dedupedFindings = append(dedupedFindings, finding)
+			continue
+		}
+
+		location := FindingLocation(finding)
+
+		if idx, exists := seen[fingerprint]; exists {
+			// Add this location to the existing finding.
+			if dedupedFindings[idx].Locations == nil {
+				// First duplicate - add the original path as first location.
+				dedupedFindings[idx].Locations = []string{
+					FindingLocation(dedupedFindings[idx]),
+				}
+			}
+			dedupedFindings[idx].Locations = append(dedupedFindings[idx].Locations, location)
+		} else {
+			// First occurrence of this fingerprint.
+			seen[fingerprint] = len(dedupedFindings)
+			dedupedFindings = append(dedupedFindings, finding)
+		}
+	}
+
+	return &ScanResult{
+		Metadata: result.Metadata,
+		Host:     result.Host,
+		Findings: dedupedFindings,
+	}
+}
+
+// FindingLocation renders a finding's location as "path" or "path:line" (when a
+// line_number is present in metadata), or "-" when there is no path.
+func FindingLocation(finding Finding) string {
+	if finding.Path == "" {
+		return "-"
+	}
+
+	location := finding.Path
+	if lineNum, ok := finding.Metadata["line_number"]; ok {
+		location = fmt.Sprintf("%s:%v", location, lineNum)
+	}
+
+	return location
+}
