@@ -115,117 +115,17 @@ func runScan(cmd *cobra.Command, args []string) error {
 	return nil
 }
 
-// initializeProbes creates and configures all probes
+// initializeProbes builds the default probe set and keeps only the enabled ones.
+// The collector also filters on IsEnabled at execution time, but filtering here
+// preserves the historical probe slice (and probe_count log) exactly.
 func initializeProbes(cfg *models.Config) []probe.Probe {
+	registry := detector.NewDefaultRegistry()
+
 	var probes []probe.Probe
-
-	// Create detector registry and register all secret detectors
-	registry := detector.NewRegistry()
-	registry.Register(detector.NewGitHubPATDetector())
-	registry.Register(detector.NewNPMTokenDetector())
-	registry.Register(detector.NewSSHPrivateKeyDetector())
-	registry.Register(detector.NewAIServiceDetector())
-	registry.Register(detector.NewHTTPAuthDetector())
-	registry.Register(detector.NewCloudCredentialsDetector())
-	registry.Register(detector.NewVaultTokenDetector())
-	registry.Register(detector.NewPyPITokenDetector())
-	registry.Register(detector.NewWireGuardKeyDetector())
-	registry.Register(detector.NewSplunkTokenDetector())
-	registry.Register(detector.NewDatabaseConnectionDetector())
-	registry.Register(detector.NewSlackTokenDetector())
-	registry.Register(detector.NewStripeKeyDetector())
-	registry.Register(detector.NewTwilioKeyDetector())
-	registry.Register(detector.NewGenericAPIKeyDetector())
-	registry.Register(detector.NewJWTDetector())
-	// Add more detectors here as they are implemented:
-	// registry.Register(detector.NewSlackTokenDetector())
-	// etc.
-
-	// Git probe
-	if cfg.Probes.Git.Enabled {
-		probes = append(probes, probe.NewGitProbe(cfg.Probes.Git, registry))
+	for _, p := range probe.DefaultProbes(cfg, registry) {
+		if p.IsEnabled() {
+			probes = append(probes, p)
+		}
 	}
-
-	// Environment variable probe
-	if cfg.Probes.Env.Enabled {
-		probes = append(probes, probe.NewEnvProbe(cfg.Probes.Env, registry))
-	}
-
-	// NPM probe
-	if cfg.Probes.NPM.Enabled {
-		probes = append(probes, probe.NewNPMProbe(cfg.Probes.NPM, registry))
-	}
-
-	// SSH probe
-	if cfg.Probes.SSH.Enabled {
-		probes = append(probes, probe.NewSSHProbe(cfg.Probes.SSH, registry))
-	}
-
-	// Shell history probe
-	if cfg.Probes.ShellHistory.Enabled {
-		probes = append(probes, probe.NewShellHistoryProbe(cfg.Probes.ShellHistory, registry))
-	}
-
-	// Cloud credentials probe
-	if cfg.Probes.Cloud.Enabled {
-		probes = append(probes, probe.NewCloudProbe(cfg.Probes.Cloud, registry))
-	}
-
-	// JetBrains probe
-	if cfg.Probes.JetBrains.Enabled {
-		probes = append(probes, probe.NewJetBrainsProbe(cfg.Probes.JetBrains, registry))
-	}
-
-	// GitHub CLI probe
-	if cfg.Probes.GH.Enabled {
-		probes = append(probes, probe.NewGHProbe(cfg.Probes.GH, registry))
-	}
-
-	// AI credentials probe (auth/oauth files; scan only — scrub leaves these alone)
-	if cfg.Probes.AICredentials.Enabled {
-		probes = append(probes, probe.NewAICredentialsProbe(cfg.Probes.AICredentials, registry))
-	}
-
-	// AI chats probe (conversation history)
-	if cfg.Probes.AIChats.Enabled {
-		probes = append(probes, probe.NewAIChatsProbe(cfg.Probes.AIChats, registry))
-	}
-
-	// WireGuard probe
-	if cfg.Probes.WireGuard.Enabled {
-		probes = append(probes, probe.NewWireGuardProbe(cfg.Probes.WireGuard, registry))
-	}
-
-	// PyPI probe
-	if cfg.Probes.PyPI.Enabled {
-		probes = append(probes, probe.NewPyPIProbe(cfg.Probes.PyPI, registry))
-	}
-
-	// Kubernetes probe — credential extraction from kubeconfig
-	if cfg.Probes.Kube.Enabled {
-		probes = append(probes, probe.NewKubeProbe(cfg.Probes.Kube, registry))
-	}
-
-	// Docker/Podman probe — inline registry credentials
-	if cfg.Probes.Docker.Enabled {
-		probes = append(probes, probe.NewDockerProbe(cfg.Probes.Docker, registry))
-	}
-
-	// Infrastructure-as-Code probe — Terraform + Helm credential discovery
-	if cfg.Probes.IaC.Enabled {
-		probes = append(probes, probe.NewIaCProbe(cfg.Probes.IaC, registry))
-	}
-
-	// AI MCP probe — credentials in MCP server configs (scan-only;
-	// scrub would break agents by replacing real tokens with markers).
-	if cfg.Probes.AIMCP.Enabled {
-		probes = append(probes, probe.NewMCPProbe(cfg.Probes.AIMCP, registry))
-	}
-
-	// AI context/memory probe — CLAUDE.md / AGENTS.md scanning.
-	if cfg.Probes.AIContext.Enabled {
-		probes = append(probes, probe.NewContextProbe(cfg.Probes.AIContext, registry))
-	}
-
 	return probes
 }

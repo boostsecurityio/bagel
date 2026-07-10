@@ -169,40 +169,57 @@ func setDefaults(v *viper.Viper) {
 	v.SetDefault("resources.max_concurrent_probes", 0)
 	v.SetDefault("resources.probe_timeout", "30s")
 
-	// Common dotfiles and config files
-	v.SetDefault("file_index.patterns", []map[string]interface{}{
+	// Common dotfiles and config files. Single source of truth is
+	// DefaultPatterns; convert to viper's map shape here.
+	defaults := DefaultPatterns()
+	rawPatterns := make([]map[string]interface{}, len(defaults))
+	for i, p := range defaults {
+		rawPatterns[i] = map[string]interface{}{
+			"name":     p.Name,
+			"patterns": p.Patterns,
+			"type":     p.Type,
+		}
+	}
+	v.SetDefault("file_index.patterns", rawPatterns)
+}
+
+// DefaultPatterns returns the built-in file-index pattern groups bagel scans by
+// default. Callers that want to extend (rather than replace) the defaults can
+// append their own PatternConfig entries to the returned slice.
+func DefaultPatterns() []models.PatternConfig {
+	return []models.PatternConfig{
 		// SSH
-		{"name": "ssh_config", "patterns": []string{".ssh/config"}, "type": "glob"},
-		{"name": "ssh_known_hosts", "patterns": []string{".ssh/known_hosts"}, "type": "glob"},
-		{"name": "ssh_keys", "patterns": []string{".ssh/id_*", ".ssh/*.pem"}, "type": "glob"},
-		{"name": "ssh_authorized_keys", "patterns": []string{".ssh/authorized_keys"}, "type": "glob"},
+		{Name: "ssh_config", Patterns: []string{".ssh/config"}, Type: "glob"},
+		{Name: "ssh_known_hosts", Patterns: []string{".ssh/known_hosts"}, Type: "glob"},
+		{Name: "ssh_keys", Patterns: []string{".ssh/id_*", ".ssh/*.pem"}, Type: "glob"},
+		{Name: "ssh_authorized_keys", Patterns: []string{".ssh/authorized_keys"}, Type: "glob"},
 
 		// Git
-		{"name": "gitconfig", "patterns": []string{".gitconfig", ".config/git/config", ".git/config"}, "type": "glob"},
-		{"name": "gitignore_global", "patterns": []string{".gitignore_global", ".config/git/ignore"}, "type": "glob"},
-		{"name": "git_credentials", "patterns": []string{".git-credentials", ".config/git/credentials"}, "type": "glob"},
+		{Name: "gitconfig", Patterns: []string{".gitconfig", ".config/git/config", ".git/config"}, Type: "glob"},
+		{Name: "gitignore_global", Patterns: []string{".gitignore_global", ".config/git/ignore"}, Type: "glob"},
+		{Name: "git_credentials", Patterns: []string{".git-credentials", ".config/git/credentials"}, Type: "glob"},
 
 		// NPM
-		{"name": "npmrc", "patterns": []string{".npmrc", ".config/npm/npmrc"}, "type": "glob"},
+		{Name: "npmrc", Patterns: []string{".npmrc", ".config/npm/npmrc"}, Type: "glob"},
 
 		// Yarn
-		{"name": "yarnrc", "patterns": []string{".yarnrc", ".yarnrc.yml"}, "type": "glob"},
+		{Name: "yarnrc", Patterns: []string{".yarnrc", ".yarnrc.yml"}, Type: "glob"},
 
 		// AWS
-		{"name": "aws_config", "patterns": []string{".aws/config"}, "type": "glob"},
-		{"name": "aws_credentials", "patterns": []string{".aws/credentials"}, "type": "glob"},
-		{"name": "aws_sso_cache", "patterns": []string{".aws/sso/cache/*.json"}, "type": "glob"},
-		{"name": "aws_cli_cache", "patterns": []string{".aws/cli/cache/*.json"}, "type": "glob"},
+		{Name: "aws_config", Patterns: []string{".aws/config"}, Type: "glob"},
+		{Name: "aws_credentials", Patterns: []string{".aws/credentials"}, Type: "glob"},
+		{Name: "aws_sso_cache", Patterns: []string{".aws/sso/cache/*.json"}, Type: "glob"},
+		{Name: "aws_cli_cache", Patterns: []string{".aws/cli/cache/*.json"}, Type: "glob"},
 
 		// Google Cloud (GCP) - Unix: ~/.config/gcloud, Windows: %APPDATA%\gcloud
-		{"name": "gcp_config", "patterns": []string{
+		{Name: "gcp_config", Patterns: []string{
 			".config/gcloud/configurations/config_*",
 			".config/gcloud/properties",
 			// Windows: %APPDATA%\gcloud
 			"AppData/Roaming/gcloud/configurations/config_*",
 			"AppData/Roaming/gcloud/properties",
-		}, "type": "glob"},
-		{"name": "gcp_credentials", "patterns": []string{
+		}, Type: "glob"},
+		{Name: "gcp_credentials", Patterns: []string{
 			".config/gcloud/credentials.db",
 			".config/gcloud/legacy_credentials/*",
 			".config/gcloud/application_default_credentials.json",
@@ -214,10 +231,10 @@ func setDefaults(v *viper.Viper) {
 			"AppData/Roaming/gcloud/application_default_credentials.json",
 			"AppData/Roaming/gcloud/adc.json",
 			"AppData/Roaming/gcloud/access_tokens.db",
-		}, "type": "glob"},
+		}, Type: "glob"},
 
 		// Azure - Unix: ~/.azure, Windows: %USERPROFILE%\.azure or %APPDATA%\.azure
-		{"name": "azure_config", "patterns": []string{
+		{Name: "azure_config", Patterns: []string{
 			".azure/config",
 			".azure/clouds.config",
 			".azure/azureProfile.json",
@@ -225,82 +242,82 @@ func setDefaults(v *viper.Viper) {
 			"AppData/Roaming/.azure/config",
 			"AppData/Roaming/.azure/clouds.config",
 			"AppData/Roaming/.azure/azureProfile.json",
-		}, "type": "glob"},
-		{"name": "azure_tokens", "patterns": []string{
+		}, Type: "glob"},
+		{Name: "azure_tokens", Patterns: []string{
 			".azure/accessTokens.json",
 			".azure/msal_token_cache.*",
 			".azure/msazure.login/*",
 			".azure/azd/*",
 			"AppData/Roaming/.azure/accessTokens.json",
 			"AppData/Roaming/.azure/msal_token_cache.*",
-		}, "type": "glob"},
-		{"name": "oci_config", "patterns": []string{
+		}, Type: "glob"},
+		{Name: "oci_config", Patterns: []string{
 			".oci/config",
 			".oci/sessions/*",
-		}, "type": "glob"},
-		{"name": "aliyun_config", "patterns": []string{".aliyun/config.json"}, "type": "glob"},
-		{"name": "bluemix_config", "patterns": []string{".bluemix/config.json"}, "type": "glob"},
-		{"name": "doctl_config", "patterns": []string{".config/doctl/config.yaml"}, "type": "glob"},
-		{"name": "hcloud_config", "patterns": []string{".config/hcloud/cli.toml"}, "type": "glob"},
-		{"name": "scw_config", "patterns": []string{".config/scw/config.yaml"}, "type": "glob"},
-		{"name": "linode_config", "patterns": []string{".config/linode-cli/*"}, "type": "glob"},
-		{"name": "fly_config", "patterns": []string{".fly/config.yml"}, "type": "glob"},
-		{"name": "vercel_config", "patterns": []string{".vercel/auth.json"}, "type": "glob"},
-		{"name": "railway_config", "patterns": []string{".railway/config.json"}, "type": "glob"},
-		{"name": "snowflake_config", "patterns": []string{".snowflake/connections.toml"}, "type": "glob"},
-		{"name": "doppler_config", "patterns": []string{".doppler.yaml"}, "type": "glob"},
-		{"name": "gh_hosts", "patterns": []string{".config/gh/hosts.yml"}, "type": "glob"},
-		{"name": "glab_config", "patterns": []string{".config/glab-cli/config.yml"}, "type": "glob"},
-		{"name": "hub_config", "patterns": []string{".config/hub"}, "type": "glob"},
-		{"name": "netrc_file", "patterns": []string{".netrc", "_netrc"}, "type": "glob"},
+		}, Type: "glob"},
+		{Name: "aliyun_config", Patterns: []string{".aliyun/config.json"}, Type: "glob"},
+		{Name: "bluemix_config", Patterns: []string{".bluemix/config.json"}, Type: "glob"},
+		{Name: "doctl_config", Patterns: []string{".config/doctl/config.yaml"}, Type: "glob"},
+		{Name: "hcloud_config", Patterns: []string{".config/hcloud/cli.toml"}, Type: "glob"},
+		{Name: "scw_config", Patterns: []string{".config/scw/config.yaml"}, Type: "glob"},
+		{Name: "linode_config", Patterns: []string{".config/linode-cli/*"}, Type: "glob"},
+		{Name: "fly_config", Patterns: []string{".fly/config.yml"}, Type: "glob"},
+		{Name: "vercel_config", Patterns: []string{".vercel/auth.json"}, Type: "glob"},
+		{Name: "railway_config", Patterns: []string{".railway/config.json"}, Type: "glob"},
+		{Name: "snowflake_config", Patterns: []string{".snowflake/connections.toml"}, Type: "glob"},
+		{Name: "doppler_config", Patterns: []string{".doppler.yaml"}, Type: "glob"},
+		{Name: "gh_hosts", Patterns: []string{".config/gh/hosts.yml"}, Type: "glob"},
+		{Name: "glab_config", Patterns: []string{".config/glab-cli/config.yml"}, Type: "glob"},
+		{Name: "hub_config", Patterns: []string{".config/hub"}, Type: "glob"},
+		{Name: "netrc_file", Patterns: []string{".netrc", "_netrc"}, Type: "glob"},
 
 		// Kiro IDE MCP — same shape as Claude Code's mcpServers; suffix
 		// matching catches both user (~/.kiro/) and project (<repo>/.kiro/) forms.
-		{"name": "kiro_mcp", "patterns": []string{".kiro/settings/mcp.json"}, "type": "glob"},
+		{Name: "kiro_mcp", Patterns: []string{".kiro/settings/mcp.json"}, Type: "glob"},
 
 		// Salesforce CLIs. .sf is the newer CLI's auth store;
 		// .sfdx/auth/* is the legacy layout. Both hold OAuth refresh tokens.
-		{"name": "sf_config", "patterns": []string{".sf/*"}, "type": "glob"},
-		{"name": "sfdx_config", "patterns": []string{".sfdx/*", ".sfdx/auth/*"}, "type": "glob"},
+		{Name: "sf_config", Patterns: []string{".sf/*"}, Type: "glob"},
+		{Name: "sfdx_config", Patterns: []string{".sfdx/*", ".sfdx/auth/*"}, Type: "glob"},
 
 		// Ansible — top-level files (galaxy_token, vault_password*).
 		// The cp/ socket dir and tmp/ subdirs aren't credentials and
 		// produce no findings on a registry pass.
-		{"name": "ansible_config", "patterns": []string{".ansible/*"}, "type": "glob"},
+		{Name: "ansible_config", Patterns: []string{".ansible/*"}, Type: "glob"},
 
 		// Rails / WordPress DB config — project-level files holding
 		// cleartext DB passwords. Suffix matching catches them at any
 		// repo depth without anchoring to home root.
-		{"name": "rails_database_yml", "patterns": []string{"config/database.yml"}, "type": "glob"},
-		{"name": "wp_config", "patterns": []string{"wp-config.php"}, "type": "glob"},
+		{Name: "rails_database_yml", Patterns: []string{"config/database.yml"}, Type: "glob"},
+		{Name: "wp_config", Patterns: []string{"wp-config.php"}, Type: "glob"},
 
 		// Docker
-		{"name": "docker_config", "patterns": []string{".docker/config.json"}, "type": "glob"},
+		{Name: "docker_config", Patterns: []string{".docker/config.json"}, Type: "glob"},
 
 		// Podman / containers — same schema as docker config.json, different path.
-		{"name": "podman_config", "patterns": []string{".config/containers/auth.json"}, "type": "glob"},
+		{Name: "podman_config", Patterns: []string{".config/containers/auth.json"}, Type: "glob"},
 
 		// Helm OCI registry auth — `helm registry login` writes a
 		// docker-config-shaped JSON here. Same `auths{<host>.auth}`
 		// blob with base64(user:password) that DockerProbe already knows how to parse.
-		{"name": "helm_oci_registry", "patterns": []string{".config/helm/registry/config.json"}, "type": "glob"},
+		{Name: "helm_oci_registry", Patterns: []string{".config/helm/registry/config.json"}, Type: "glob"},
 
 		// Docker context TLS material — client cert + key + CA for
 		// connecting to a remote Docker daemon. Only the key.pem is a
 		// secret; cert.pem and ca.pem start with `BEGIN CERTIFICATE`
 		// which the SSH-private-key detector ignores by design.
-		{"name": "docker_context_keys", "patterns": []string{".docker/contexts/tls/*/*/*.pem"}, "type": "glob"},
+		{Name: "docker_context_keys", Patterns: []string{".docker/contexts/tls/*/*/*.pem"}, Type: "glob"},
 
 		// Kubernetes
-		{"name": "kubeconfig", "patterns": []string{".kube/config"}, "type": "glob"},
+		{Name: "kubeconfig", Patterns: []string{".kube/config"}, Type: "glob"},
 
 		// Shell configs
-		{"name": "bashrc", "patterns": []string{".bashrc", ".bash_profile", ".profile"}, "type": "glob"},
-		{"name": "zshrc", "patterns": []string{".zshrc", ".zprofile"}, "type": "glob"},
+		{Name: "bashrc", Patterns: []string{".bashrc", ".bash_profile", ".profile"}, Type: "glob"},
+		{Name: "zshrc", Patterns: []string{".zshrc", ".zprofile"}, Type: "glob"},
 
 		// Shell history files - Unix shells and PowerShell (Windows).
 		// Also covers DB and language-REPL input history.
-		{"name": "shell_history", "patterns": []string{
+		{Name: "shell_history", Patterns: []string{
 			".bash_history",
 			".zsh_history",
 			".sh_history",
@@ -315,119 +332,119 @@ func setDefaults(v *viper.Viper) {
 			".python_history",
 			".node_repl_history",
 			".irb_history",
-		}, "type": "glob"},
+		}, Type: "glob"},
 
 		// Environment files
-		{"name": "env_files", "patterns": []string{".env", ".env.*"}, "type": "glob"},
+		{Name: "env_files", Patterns: []string{".env", ".env.*"}, Type: "glob"},
 
 		// JetBrains
-		{"name": "jetbrains", "patterns": []string{".idea/workspace.xml"}, "type": "glob"},
+		{Name: "jetbrains", Patterns: []string{".idea/workspace.xml"}, Type: "glob"},
 
 		// AI tools
-		{"name": "gemini_credentials", "patterns": []string{".gemini/oauth_creds.json"}, "type": "glob"},
-		{"name": "codex_credentials", "patterns": []string{".codex/auth.json"}, "type": "glob"},
-		{"name": "opencode_credentials", "patterns": []string{".local/share/opencode/auth.json"}, "type": "glob"},
+		{Name: "gemini_credentials", Patterns: []string{".gemini/oauth_creds.json"}, Type: "glob"},
+		{Name: "codex_credentials", Patterns: []string{".codex/auth.json"}, Type: "glob"},
+		{Name: "opencode_credentials", Patterns: []string{".local/share/opencode/auth.json"}, Type: "glob"},
 
-		{"name": "gemini_chats", "patterns": []string{".gemini/tmp/*/chats/*.json"}, "type": "glob"},
-		{"name": "codex_chats", "patterns": []string{".codex/sessions/*/*/*/rollout-*.jsonl"}, "type": "glob"},
-		{"name": "claude_chats", "patterns": []string{".claude/projects/*/*.jsonl"}, "type": "glob"},
-		{"name": "opencode_chats", "patterns": []string{".local/share/opencode/storage/part/msg_*/prt_*.json"}, "type": "glob"},
+		{Name: "gemini_chats", Patterns: []string{".gemini/tmp/*/chats/*.json"}, Type: "glob"},
+		{Name: "codex_chats", Patterns: []string{".codex/sessions/*/*/*/rollout-*.jsonl"}, Type: "glob"},
+		{Name: "claude_chats", Patterns: []string{".claude/projects/*/*.jsonl"}, Type: "glob"},
+		{Name: "opencode_chats", Patterns: []string{".local/share/opencode/storage/part/msg_*/prt_*.json"}, Type: "glob"},
 
 		// Additional AI agent history / paste / env surfaces beyond
 		// session rollouts. Users routinely paste tokens into prompts;
 		// the paste-cache is literally a record of those pastes. REPL
 		// history files capture every prompt the user submitted at the
 		// top level (separate from per-session rollouts).
-		{"name": "claude_repl_history", "patterns": []string{".claude/history.jsonl"}, "type": "glob"},
-		{"name": "claude_paste_cache", "patterns": []string{".claude/paste-cache/*"}, "type": "glob"},
-		{"name": "claude_session_env", "patterns": []string{".claude/session-env/*"}, "type": "glob"},
-		{"name": "codex_repl_history", "patterns": []string{".codex/history.jsonl"}, "type": "glob"},
-		{"name": "opencode_session_info", "patterns": []string{".local/share/opencode/storage/session/info/*.json"}, "type": "glob"},
-		{"name": "opencode_session_message", "patterns": []string{".local/share/opencode/storage/session/message/*/*.json"}, "type": "glob"},
+		{Name: "claude_repl_history", Patterns: []string{".claude/history.jsonl"}, Type: "glob"},
+		{Name: "claude_paste_cache", Patterns: []string{".claude/paste-cache/*"}, Type: "glob"},
+		{Name: "claude_session_env", Patterns: []string{".claude/session-env/*"}, Type: "glob"},
+		{Name: "codex_repl_history", Patterns: []string{".codex/history.jsonl"}, Type: "glob"},
+		{Name: "opencode_session_info", Patterns: []string{".local/share/opencode/storage/session/info/*.json"}, Type: "glob"},
+		{Name: "opencode_session_message", Patterns: []string{".local/share/opencode/storage/session/message/*/*.json"}, Type: "glob"},
 
 		// AI agent MCP server configs. mcpServers blocks carry the env
 		// map that holds API tokens for third-party services (GitHub
 		// PATs, Slack tokens, etc.). claude.json is the application
 		// state file; settings.{,local.}json may carry mcpServers too;
 		// .mcp.json is a project-level MCP-only file.
-		{"name": "claude_app_state", "patterns": []string{".claude/claude.json"}, "type": "glob"},
-		{"name": "claude_settings", "patterns": []string{
+		{Name: "claude_app_state", Patterns: []string{".claude/claude.json"}, Type: "glob"},
+		{Name: "claude_settings", Patterns: []string{
 			".claude/settings.json",
 			".claude/settings.local.json",
-		}, "type": "glob"},
-		{"name": "mcp_project_config", "patterns": []string{".mcp.json"}, "type": "glob"},
+		}, Type: "glob"},
+		{Name: "mcp_project_config", Patterns: []string{".mcp.json"}, Type: "glob"},
 
 		// AI agent context/memory files — pasted secrets get baked
 		// into these by users. Basename match: catch them anywhere
 		// under home (per-repo CLAUDE.md, global ~/.claude/CLAUDE.md,
 		// codex/opencode AGENTS.md, etc.).
-		{"name": "ai_memory_md", "patterns": []string{
+		{Name: "ai_memory_md", Patterns: []string{
 			"CLAUDE.md",
 			"AGENTS.md",
-		}, "type": "glob"},
+		}, Type: "glob"},
 
 		// Claude Code user-level customization. Commands, agents, and
 		// skills are user-authored Markdown that Claude loads as
 		// context — secrets in the prompt body get sent to the model
 		// on every invocation.
-		{"name": "claude_commands", "patterns": []string{".claude/commands/*.md"}, "type": "glob"},
-		{"name": "claude_agents", "patterns": []string{".claude/agents/*.md"}, "type": "glob"},
+		{Name: "claude_commands", Patterns: []string{".claude/commands/*.md"}, Type: "glob"},
+		{Name: "claude_agents", Patterns: []string{".claude/agents/*.md"}, Type: "glob"},
 		// Skills usually have SKILL.md at the skill root plus optional
 		// sibling .md docs; the glob catches both shapes.
-		{"name": "claude_skills", "patterns": []string{".claude/skills/*/*.md"}, "type": "glob"},
+		{Name: "claude_skills", Patterns: []string{".claude/skills/*/*.md"}, Type: "glob"},
 		// Cross-agent skill store (a number of plugins symlink into
 		// ~/.agents/skills/). Worth scanning so the underlying files
 		// surface even when symlinks aren't being followed.
-		{"name": "agents_skills", "patterns": []string{".agents/skills/*/*.md"}, "type": "glob"},
+		{Name: "agents_skills", Patterns: []string{".agents/skills/*/*.md"}, Type: "glob"},
 
 		// Codex CLI context/memory.
-		{"name": "codex_instructions", "patterns": []string{".codex/instructions.md"}, "type": "glob"},
-		{"name": "codex_memories", "patterns": []string{".codex/memories/*"}, "type": "glob"},
-		{"name": "codex_skills", "patterns": []string{".codex/skills/*/*.md"}, "type": "glob"},
+		{Name: "codex_instructions", Patterns: []string{".codex/instructions.md"}, Type: "glob"},
+		{Name: "codex_memories", Patterns: []string{".codex/memories/*"}, Type: "glob"},
+		{Name: "codex_skills", Patterns: []string{".codex/skills/*/*.md"}, Type: "glob"},
 
 		// WireGuard (user-level configs; system paths are checked directly by the probe)
-		{"name": "wireguard_config", "patterns": []string{".config/wireguard/*.conf"}, "type": "glob"},
+		{Name: "wireguard_config", Patterns: []string{".config/wireguard/*.conf"}, Type: "glob"},
 
 		// HashiCorp Vault
-		{"name": "vault_token", "patterns": []string{".vault-token"}, "type": "glob"},
+		{Name: "vault_token", Patterns: []string{".vault-token"}, Type: "glob"},
 
 		// PyPI
-		{"name": "pypirc", "patterns": []string{".pypirc"}, "type": "glob"},
-		{"name": "pip_config", "patterns": []string{
+		{Name: "pypirc", Patterns: []string{".pypirc"}, Type: "glob"},
+		{Name: "pip_config", Patterns: []string{
 			".pip/pip.conf",
 			".config/pip/pip.conf",
 			// macOS
 			"Library/Application Support/pip/pip.conf",
 			// Windows
 			"AppData/Roaming/pip/pip.ini",
-		}, "type": "glob"},
+		}, Type: "glob"},
 
 		// Terraform — credentials live in either path. The JSON form is
 		// authoritative for `terraform login`; the legacy HCL form is
 		// still common from manual setups.
-		{"name": "terraform_credentials", "patterns": []string{
+		{Name: "terraform_credentials", Patterns: []string{
 			".terraform.d/credentials.tfrc.json",
 			".terraformrc",
-		}, "type": "glob"},
+		}, Type: "glob"},
 		// Terraform variable / state files. tfvars commonly hold cloud
 		// creds and DB passwords; local-backend state serializes resource
 		// outputs (including sensitive ones) as plaintext JSON.
-		{"name": "terraform_vars", "patterns": []string{
+		{Name: "terraform_vars", Patterns: []string{
 			"*.tfvars",
 			"*.auto.tfvars",
-		}, "type": "glob"},
-		{"name": "terraform_state", "patterns": []string{
+		}, Type: "glob"},
+		{Name: "terraform_state", Patterns: []string{
 			"terraform.tfstate",
 			"terraform.tfstate.backup",
-		}, "type": "glob"},
+		}, Type: "glob"},
 
 		// Helm — username/password live under repositories[] in this file.
-		{"name": "helm_repositories", "patterns": []string{
+		{Name: "helm_repositories", Patterns: []string{
 			".config/helm/repositories.yaml",
 			// macOS
 			"Library/Preferences/helm/repositories.yaml",
-		}, "type": "glob"},
-	})
+		}, Type: "glob"},
+	}
 }
 
 // GetConfigDir returns the platform-appropriate configuration directory for bagel.

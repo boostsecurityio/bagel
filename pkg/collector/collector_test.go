@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/boostsecurityio/bagel/pkg/fileindex"
 	"github.com/boostsecurityio/bagel/pkg/models"
 	"github.com/boostsecurityio/bagel/pkg/probe"
 	"github.com/stretchr/testify/assert"
@@ -157,6 +158,39 @@ func TestCollect_ProbeErrors(t *testing.T) {
 	// Should only have findings from successful probe
 	assert.Len(t, result.Findings, 1, "expected 1 finding from successful probe")
 	assert.Equal(t, "finding1", result.Findings[0].ID, "expected finding1")
+}
+
+// fileIndexProbe records the file index handed to it via SetFileIndex.
+type fileIndexProbe struct {
+	mockProbe
+	got *fileindex.FileIndex
+}
+
+func (p *fileIndexProbe) SetFileIndex(idx *fileindex.FileIndex) { p.got = idx }
+
+// TestCollect_InjectedFileIndex confirms a caller-supplied index is used as-is:
+// it reaches FileIndexAware probes and Collect never builds its own (the probe
+// receives the exact pointer we injected, which a fresh build could not produce).
+func TestCollect_InjectedFileIndex(t *testing.T) {
+	t.Parallel()
+
+	injected, err := fileindex.BuildIndex(context.TODO(), fileindex.BuildIndexInput{
+		BaseDirs: []string{t.TempDir()},
+	})
+	require.NoError(t, err)
+
+	prb := &fileIndexProbe{mockProbe: mockProbe{name: "fi", enabled: true}}
+
+	// NoCache:false would normally build + touch the cache; injection must skip both.
+	col := New(NewInput{
+		Probes:    []probe.Probe{prb},
+		Config:    &models.Config{Version: 1},
+		FileIndex: injected,
+	})
+
+	_, err = col.Collect(context.TODO())
+	require.NoError(t, err)
+	assert.Same(t, injected, prb.got, "probe should receive the injected index, not a freshly built one")
 }
 
 func TestExecuteProbes_ConcurrentExecution(t *testing.T) {
