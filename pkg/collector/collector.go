@@ -14,8 +14,8 @@ import (
 	"github.com/boostsecurityio/bagel/pkg/fileindex"
 	"github.com/boostsecurityio/bagel/pkg/models"
 	"github.com/boostsecurityio/bagel/pkg/probe"
+	"github.com/boostsecurityio/bagel/pkg/progress"
 	"github.com/boostsecurityio/bagel/pkg/sysinfo"
-	"github.com/boostsecurityio/bagel/pkg/wsl"
 	"github.com/mattn/go-isatty"
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
@@ -128,139 +128,54 @@ func (c *Collector) Collect(ctx context.Context) (*models.ScanResult, error) {
 	}, nil
 }
 
-// buildFileIndex constructs the file index based on configuration
+// buildFileIndex constructs the file index based on configuration, delegating
+// to the exported BuildFileIndex and rendering progress with a terminal bar
+// when appropriate.
 func (c *Collector) buildFileIndex(ctx context.Context) (*fileindex.FileIndex, error) {
-	logger := log.Ctx(ctx)
-
-	// Convert config patterns to fileindex.Pattern
-	patterns := make([]fileindex.Pattern, 0, len(c.config.FileIndex.Patterns))
-	for _, p := range c.config.FileIndex.Patterns {
-		patterns = append(patterns, fileindex.Pattern{
-			Name:     p.Name,
-			Patterns: p.Patterns,
-			Type:     fileindex.PatternType(p.Type),
-		})
-	}
-
-	baseDirs := c.config.FileIndex.BaseDirs
-
-	// On Windows, append the home dirs of installed WSL distros so Linux
-	// secrets behind WSL aren't a blindspot. No-op on other platforms.
-	if c.config.FileIndex.ScanWSL {
-		if wslDirs := wsl.Homes(ctx); len(wslDirs) > 0 {
-			baseDirs = append(append([]string{}, baseDirs...), wslDirs...)
-		}
-	}
-
-	// Try loading from cache (unless disabled)
+	var store *cache.Store
 	if !c.noCache {
-		index, err := c.loadFromCache(ctx, baseDirs, patterns)
-		if err != nil {
-			logger.Debug().Err(err).Msg("Failed to load file index from cache")
-		}
-		if index != nil {
-			return index, nil
-		}
+		store = c.cacheStore
 	}
 
-	// Build fresh index
-	indexStartTime := time.Now()
-
-	// Set up progress callback if progress bars are enabled
-	var progressCallback func(processed int64)
-	var bar *progressbar.ProgressBar
+	var reporter progress.Reporter = progress.NoOp{}
 	if c.shouldShowProgress() {
-		bar = progressbar.NewOptions(-1,
-			progressbar.OptionSetDescription("Indexing files"),
-			progressbar.OptionSetWriter(os.Stderr),
-			progressbar.OptionSpinnerType(14),
-			progressbar.OptionShowCount(),
-		)
-		progressCallback = func(processed int64) {
-			_ = bar.Set64(processed)
-		}
+		reporter = newBarReporter("Indexing files")
 	}
 
-	input := fileindex.BuildIndexInput{
-		BaseDirs:         baseDirs,
-		ExcludePaths:     c.config.FileIndex.ExcludePaths,
-		Patterns:         patterns,
-		MaxDepth:         c.config.FileIndex.MaxDepth,
-		FollowSymlinks:   c.config.FileIndex.FollowSymlinks,
-		NumWorkers:       c.config.Resources.FileIndexWorkers,
-		ProgressCallback: progressCallback,
-	}
-
-	index, err := fileindex.BuildIndex(ctx, input)
-
-	// Finish progress bar if it was created
-	if bar != nil {
-		_ = bar.Finish()
-	}
-
-	if err != nil {
-		return nil, fmt.Errorf("build file index: %w", err)
-	}
-
-	indexDuration := time.Since(indexStartTime)
-	logger.Info().
-		Dur("duration", indexDuration).
-		Int("total_files", index.TotalFiles()).
-		Msg("File index built successfully")
-
-	// Save to cache (best effort)
-	if !c.noCache {
-		if err := c.saveToCache(ctx, baseDirs, patterns, index); err != nil {
-			logger.Warn().Err(err).Msg("Failed to save file index to cache")
-		}
-	}
-
-	return index, nil
+	return BuildFileIndex(ctx, c.config, store, reporter)
 }
 
-// loadFromCache attempts to load the file index from cache
-func (c *Collector) loadFromCache(ctx context.Context, baseDirs []string, patterns []fileindex.Pattern) (*fileindex.FileIndex, error) {
-	if c.cacheStore == nil {
-		return nil, nil
-	}
-
-	ttl, _ := time.ParseDuration(c.config.FileIndex.Cache.TTL)
-
-	index, err := c.cacheStore.Load(ctx, cache.LoadInput{
-		BaseDirs:       baseDirs,
-		ExcludePaths:   c.config.FileIndex.ExcludePaths,
-		Patterns:       patterns,
-		MaxDepth:       c.config.FileIndex.MaxDepth,
-		FollowSymlinks: c.config.FileIndex.FollowSymlinks,
-		TTL:            ttl,
-		ValidateFiles:  c.config.FileIndex.Cache.ValidateOnLoad,
-	})
-	if err != nil {
-		return nil, fmt.Errorf("load from cache: %w", err)
-	}
-
-	return index, nil
+// barReporter renders progress as a terminal spinner via progressbar. The bar
+// is created lazily in Start so nothing is shown when a crawl never begins
+// (e.g. a cache hit). It implements progress.Reporter.
+type barReporter struct {
+	description string
+	bar         *progressbar.ProgressBar
 }
 
-// saveToCache persists the file index to cache
-func (c *Collector) saveToCache(ctx context.Context, baseDirs []string, patterns []fileindex.Pattern, index *fileindex.FileIndex) error {
-	if c.cacheStore == nil {
-		return nil
-	}
+func newBarReporter(description string) *barReporter {
+	return &barReporter{description: description}
+}
 
-	if err := c.cacheStore.Save(ctx, cache.SaveInput{
-		BaseDirs:       baseDirs,
-		ExcludePaths:   c.config.FileIndex.ExcludePaths,
-		Patterns:       patterns,
-		MaxDepth:       c.config.FileIndex.MaxDepth,
-		FollowSymlinks: c.config.FileIndex.FollowSymlinks,
-		Index:          index,
-		SampleSize:     c.config.FileIndex.Cache.SampleSize,
-	}); err != nil {
-		return fmt.Errorf("save to cache: %w", err)
-	}
+func (b *barReporter) Start() {
+	b.bar = progressbar.NewOptions(-1,
+		progressbar.OptionSetDescription(b.description),
+		progressbar.OptionSetWriter(os.Stderr),
+		progressbar.OptionSpinnerType(14),
+		progressbar.OptionShowCount(),
+	)
+}
 
-	return nil
+func (b *barReporter) Update(processed int64) {
+	if b.bar != nil {
+		_ = b.bar.Set64(processed)
+	}
+}
+
+func (b *barReporter) Done() {
+	if b.bar != nil {
+		_ = b.bar.Finish()
+	}
 }
 
 // executeProbes runs all enabled probes concurrently with timeouts using errgroup.
