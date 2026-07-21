@@ -73,7 +73,7 @@ func New(format Format, output io.Writer) *Reporter {
 // Report outputs the scan results in the configured format
 func (r *Reporter) Report(result *models.ScanResult) error {
 	// Deduplicate findings based on fingerprint
-	dedupedResult := deduplicateFindings(result)
+	dedupedResult := models.DeduplicateFindings(result)
 
 	switch r.format {
 	case FormatJSON:
@@ -200,66 +200,6 @@ func formatLocation(finding models.Finding) string {
 // containsEnvVar checks if the location already references the env var
 func containsEnvVar(location, envVar string) bool {
 	return len(location) >= len("env:"+envVar) && location[4:4+len(envVar)] == envVar
-}
-
-// deduplicateFindings groups findings by fingerprint and consolidates locations
-func deduplicateFindings(result *models.ScanResult) *models.ScanResult {
-	if result == nil || len(result.Findings) == 0 {
-		return result
-	}
-
-	// Map fingerprint -> first finding with that fingerprint
-	seen := make(map[string]int) // fingerprint -> index in dedupedFindings
-	var dedupedFindings []models.Finding
-
-	for _, finding := range result.Findings {
-		fingerprint := finding.Fingerprint
-
-		// If no fingerprint, keep the finding as-is (no dedup possible)
-		if fingerprint == "" {
-			dedupedFindings = append(dedupedFindings, finding)
-			continue
-		}
-
-		location := formatLocationFromFinding(finding)
-
-		if idx, exists := seen[fingerprint]; exists {
-			// Add this location to the existing finding
-			if dedupedFindings[idx].Locations == nil {
-				// First duplicate - add the original path as first location
-				dedupedFindings[idx].Locations = []string{
-					formatLocationFromFinding(dedupedFindings[idx]),
-				}
-			}
-			dedupedFindings[idx].Locations = append(dedupedFindings[idx].Locations, location)
-		} else {
-			// First occurrence of this fingerprint
-			seen[fingerprint] = len(dedupedFindings)
-			dedupedFindings = append(dedupedFindings, finding)
-		}
-	}
-
-	return &models.ScanResult{
-		Metadata: result.Metadata,
-		Host:     result.Host,
-		Findings: dedupedFindings,
-	}
-}
-
-// formatLocationFromFinding creates a location string from a finding's path and metadata
-func formatLocationFromFinding(finding models.Finding) string {
-	if finding.Path == "" {
-		return "-"
-	}
-
-	location := finding.Path
-
-	// Append line number if present
-	if lineNum, ok := finding.Metadata["line_number"]; ok {
-		location = fmt.Sprintf("%s:%v", location, lineNum)
-	}
-
-	return location
 }
 
 // renderSystemInfo displays extended system information in table format
