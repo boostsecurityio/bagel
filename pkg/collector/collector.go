@@ -29,7 +29,8 @@ type Collector struct {
 	config     *models.Config
 	noCache    bool
 	noProgress bool
-	cacheStore *cache.Store // Reused across load/save operations
+	cacheStore *cache.Store         // Reused across load/save operations
+	fileIndex  *fileindex.FileIndex // Prebuilt index; when non-nil, Collect skips building/caching its own
 }
 
 // NewInput holds the parameters for creating a new Collector
@@ -38,6 +39,10 @@ type NewInput struct {
 	Config     *models.Config
 	NoCache    bool
 	NoProgress bool
+	// FileIndex, when non-nil, is used as-is; Collect skips building and
+	// caching its own index. Lets a caller own the crawl (e.g. share one
+	// index across bagel's probes and its own).
+	FileIndex *fileindex.FileIndex
 }
 
 // New creates a new Collector
@@ -53,6 +58,7 @@ func New(input NewInput) *Collector {
 		noCache:    input.NoCache,
 		noProgress: input.NoProgress,
 		cacheStore: store,
+		fileIndex:  input.FileIndex,
 	}
 }
 
@@ -74,10 +80,14 @@ func (c *Collector) Collect(ctx context.Context) (*models.ScanResult, error) {
 		return nil, fmt.Errorf("failed to get host info: %w", err)
 	}
 
-	// Build file index if enabled
-	fileIdx, err := c.buildFileIndex(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("failed to build file index: %w", err)
+	// Use a caller-supplied index as-is; otherwise build (and cache) our own.
+	fileIdx := c.fileIndex
+	if fileIdx == nil {
+		var err error
+		fileIdx, err = c.buildFileIndex(ctx)
+		if err != nil {
+			return nil, fmt.Errorf("failed to build file index: %w", err)
+		}
 	}
 
 	// Compute fingerprint salt from host identity and propagate to probes
