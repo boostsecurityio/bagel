@@ -96,15 +96,10 @@ func (p *ShellHistoryProbe) processHistoryFile(ctx context.Context, historyPath 
 	}
 	defer file.Close()
 
-	// Read file line by line to handle large history files efficiently
-	scanner := bufio.NewScanner(file)
-
-	// Increase buffer size to handle very long command lines
-	// Default is 64KB which may be too small for complex commands
-	// Set to 1MB which should handle even the longest commands
-	const maxLineSize = 1024 * 1024 // 1MB
-	buf := make([]byte, 0, 64*1024)
-	scanner.Buffer(buf, maxLineSize)
+	// bufio's default 64KB cap is too small for complex commands.
+	const maxLineSize = 1024 * 1024
+	scanner, release := newLineScanner(file, maxLineSize)
+	defer release()
 
 	// Fish stores history as a YAML stream; bash/zsh/sh/PowerShell store
 	// plain command lines. We only apply fish-specific parsing when the path

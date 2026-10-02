@@ -10,6 +10,7 @@ import (
 	"io"
 	"os"
 	"strings"
+	"sync"
 
 	"github.com/boostsecurityio/bagel/pkg/detector"
 	"github.com/boostsecurityio/bagel/pkg/fileindex"
@@ -56,6 +57,22 @@ type Result struct {
 // handle minified JSON values, long base64 tokens, and the like.
 const defaultMaxLineSize = 1024 * 1024
 
+var lineBufPool = sync.Pool{New: func() any {
+	b := make([]byte, 64*1024)
+	return &b
+}}
+
+// newLineScanner returns a scanner over r backed by a pooled 64 KiB buffer
+// that grows on demand up to maxLineSize. Call release once scanning is done.
+// Tokens must be copied out (scanner.Text) before release, since the buffer
+// is handed to the next scan.
+func newLineScanner(r io.Reader, maxLineSize int) (*bufio.Scanner, func()) {
+	buf, _ := lineBufPool.Get().(*[]byte)
+	scanner := bufio.NewScanner(r)
+	scanner.Buffer(*buf, maxLineSize)
+	return scanner, func() { lineBufPool.Put(buf) }
+}
+
 // scanFileLines opens filePath and runs registry.DetectAll against each
 // non-empty line, attaching the 1-based line number to every finding so the
 // reporter can render a "path:line" location. Returns nil if the file can't
@@ -100,8 +117,8 @@ func scanReaderLines(
 	if maxLineSize <= 0 {
 		maxLineSize = defaultMaxLineSize
 	}
-	scanner := bufio.NewScanner(r)
-	scanner.Buffer(make([]byte, 0, 64*1024), maxLineSize)
+	scanner, release := newLineScanner(r, maxLineSize)
+	defer release()
 
 	var findings []models.Finding
 	lineNum := 0
