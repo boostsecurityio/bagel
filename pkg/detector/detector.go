@@ -63,7 +63,7 @@ func (r *Registry) DetectAll(content string, ctx *models.DetectionContext) []mod
 	// Propagate the registry's fingerprint salt to the detection context
 	ctx.FingerprintSalt = r.fingerprintSalt
 
-	findings := make([]models.Finding, 0, len(r.detectors))
+	var findings []models.Finding
 
 	for _, det := range r.detectors {
 		detectorFindings := det.Detect(content, ctx)

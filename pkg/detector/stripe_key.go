@@ -73,7 +73,7 @@ func (d *StripeKeyDetector) Detect(
 	content string,
 	ctx *models.DetectionContext,
 ) []models.Finding {
-	findings := make([]models.Finding, 0, 4)
+	var findings []models.Finding
 	seen := make(map[string]bool)
 
 	// kind is the human-readable variant label ("secret" / "restricted"
